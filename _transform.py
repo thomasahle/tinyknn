@@ -73,8 +73,6 @@ def transform_tables(tables0):
     assert d % 2 == 0  # Because we load two rows at a time (128bits)
     assert b == 16
     assert tables0.dtype == np.uint8
-    # assert np.all(-128 <= tables0) and np.all(tables0 < 128)
-    assert np.all(0 <= tables0) and np.all(tables0 < 256)
     # Convert tables to 128 bit format
     tables = tables0.reshape(2 * d, 8)
     # Viewing takes care of swapping the byte order automatically
