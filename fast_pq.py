@@ -25,7 +25,6 @@ class PQ:
             labels.append(cl.labels_)
         self.centers = np.array(centers, dtype=np.float32)
         self.norms = np.linalg.norm(centers, axis=2) ** 2
-        print(self.centers.shape)
         labels = np.array(labels, dtype=np.uint8).T
         return transform.transform_data(labels)
 
