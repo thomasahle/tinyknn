@@ -5,6 +5,7 @@ from fast_pq import PQ, distances
 
 
 def test_recall():
+    np.random.seed(10)
     for i in range(1, 10):
         recall_at_10 = _test_recall_inner(16 * i, 8 * i, 100, 2)
         assert recall_at_10 > 0.8
