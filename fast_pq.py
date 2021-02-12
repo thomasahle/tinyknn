@@ -8,6 +8,7 @@ class PQ:
     def __init__(self, dims_per_block):
         self.dims_per_block = dims_per_block
         self.centers = []
+        self.norms = []
 
     def fit_transform(self, data):
         n, d = data.shape
@@ -46,7 +47,8 @@ class PQ:
         trans = transform.transform_tables(table)
         return trans, scale
 
-    def distances(self, data, tables):
-        out = np.zeros(2 * len(data), dtype=np.uint64)
-        query_pq_sse(data, tables, out)
-        return out.view(np.uint8)
+
+def distances(data, tables):
+    out = np.zeros(2 * len(data), dtype=np.uint64)
+    query_pq_sse(data, tables, out)
+    return out.view(np.uint8)

@@ -1,8 +1,7 @@
-import pytest
 import numpy as np
 import scipy as sp
 
-from fast_pq import PQ
+from fast_pq import PQ, distances
 
 
 def test_recall():
@@ -20,7 +19,7 @@ def _test_recall_inner(n, d, k, dpb):
     recall_at_10 = 0
     for q, tru in zip(qs, trus):
         tables, _ = pq.transform_query(q)
-        top10 = pq.distances(data, tables).argpartition(10)[:10]
+        top10 = distances(data, tables).argpartition(10)[:10]
         if tru in top10:
             recall_at_10 += 1
     return recall_at_10 / k

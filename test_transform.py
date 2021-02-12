@@ -1,5 +1,5 @@
-import numpy as np
 import random
+import numpy as np
 
 from _fast_pq import query_pq_sse
 from _transform import transform_data, transform_tables

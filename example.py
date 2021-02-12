@@ -1,6 +1,8 @@
-from fast_pq import PQ
+import time
 import scipy as sp
 import numpy as np
+
+from fast_pq import PQ, distances
 
 n, d, k = 16 * 1000, 128, 1000
 
@@ -18,7 +20,7 @@ data = pq.fit_transform(X)
 
 print("Querying")
 t1, t2, t3 = 0, 0, 0
-totwhere = 0
+tot_where = 0
 for q, tru in zip(qs, trus):
     start = time.time()
     # Right now transforming is way too slow.
@@ -26,7 +28,7 @@ for q, tru in zip(qs, trus):
     t1 += time.time() - start
     # print('Scale:', scale)
     start = time.time()
-    est8 = pq.distances(data, tables)
+    est8 = distances(data, tables)
     t2 += time.time() - start
     # print('Saturation degree:', np.sum(est8 == 255)/est8.size)
     # print('Non saturated:', np.sum(est8 != 255))
@@ -36,9 +38,9 @@ for q, tru in zip(qs, trus):
     start = time.time()
     where = tru.index(est8.argmin())
     t3 += time.time() - start
-    totwhere += where
+    tot_where += where
     # print('Place:', where)
     # print()
-print("Avg place:", totwhere / k)
+print("Avg place:", tot_where / k)
 print("Queries/second:", k / (t1 + t2))
 print(t1, t2, t3)
