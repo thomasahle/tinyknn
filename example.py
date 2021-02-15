@@ -4,7 +4,7 @@ import numpy as np
 
 from fast_pq import FastPQ
 
-n, d, k, dpb = 16 * 1000, 128, 1000, 2
+n, d, k, dpb = 16 * 1000, 99, 1000, 3
 print(f'{n=}, {d=}, queries={k}, dims_per_block={dpb}')
 
 print("Sampling")

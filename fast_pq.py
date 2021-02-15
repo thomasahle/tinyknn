@@ -3,19 +3,24 @@ import sklearn.cluster
 from _transform import transform_data, transform_tables
 from _fast_pq import query_pq_sse
 
+def pad(arr, mults):
+    new_shape = tuple(s+(-s)%m for s, m in zip(arr.shape, mults))
+    new_arr = np.zeros(new_shape, dtype=arr.dtype)
+    new_arr[tuple(slice(0,s) for s in arr.shape)] = arr
+    return new_arr
 
 class FastPQ:
     def __init__(self, dims_per_block):
         self.dims_per_block = dims_per_block
-        self.centers = []      # Shape: (n_blocks, 16, dims_per_block)
-        self.center_norms = [] # Shape: (n_blocks, 16)
+        self.centers = None      # Shape: (n_blocks, 16, dims_per_block)
+        self.center_norms = None # Shape: (n_blocks, 16)
 
     def fit(self, data):
+        data = pad(data, (16, 2*self.dims_per_block))
         n, d = data.shape
-        dpb = self.dims_per_block
         assert d % self.dims_per_block == 0
         assert (d // self.dims_per_block) % 2 == 0
-        assert n % 16 == 0
+        dpb = self.dims_per_block
         cl = sklearn.cluster.KMeans(16, n_init=1)
         centers = []
         for i in range(d // self.dims_per_block):
@@ -26,18 +31,23 @@ class FastPQ:
         return self
 
     def transform(self, data):
+        assert self.centers is not None, "PQ has not been fitted"
+        true_n = data.shape[0]
+        data = pad(data, (16, 2*self.dims_per_block))
         n, d = data.shape
+        assert n % 16 == 0
         parts = data.reshape(n, -1, self.dims_per_block)
         ips = np.einsum("ijk,jlk->ijl", parts, self.centers) # Shape: (n, n_blocks, 16)
         labels = np.argmin(self.center_norms - 2*ips, axis=2)
         assert labels.shape == (n, d//self.dims_per_block)
         labels = np.array(labels, dtype=np.uint8)
-        return transform_data(labels)
+        return true_n, transform_data(labels)
 
     def fit_transform(self, data):
         return self.fit(data).transform(data)
 
     def distance_table(self, q, signed=False):
+        q = pad(q, (2*self.dims_per_block,))
         dpb = self.dims_per_block
         parts = q.reshape(-1, dpb)
         blocks = q.size / dpb
@@ -71,10 +81,12 @@ class _FastDistanceTable:
         self.signed = signed
 
     def estimate_distances(self, transformed_data, out=None, rescale=False):
+        true_n, transformed_data = transformed_data
         if out is None:
             out = np.zeros(2 * len(transformed_data), dtype=np.uint64)
         query_pq_sse(transformed_data, self.tables, out, self.signed)
         res = out.view(np.int8) if self.signed else out.view(np.uint8)
+        res = res[:true_n]
         if rescale:
             return np.ascontiguousarray(res, dtype=np.float32) * self.scale
         return res
@@ -85,7 +97,7 @@ class _FastDistanceTable:
         Indices are in no particular order.
         '''
         if not rescore:
-            rescore = min(2*k+10, len(data))
+            rescore = min(2*k+10, len(data)-1)
         assert rescore >= k
         est = self.estimate_distances(transformed_data, out=out)
         est = est.astype(np.float32) # Numpy only works on floats
@@ -96,7 +108,8 @@ class _FastDistanceTable:
             return guess[best], -ips[best]
         else:
             guess = np.argpartition(est, rescore)[:rescore] # We want small dists
-            dists = np.sum(data[guess] * data[guess], axis=1, keepdims=True) - 2 * q @ data[guess].T
+            dists = np.sum(data[guess] * data[guess], axis=1) \
+                    - 2 * self.q @ data[guess].T
             best = np.argpartition(dists, k)[:k]
             return guess[best], dists[best]
 
