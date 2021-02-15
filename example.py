@@ -2,7 +2,7 @@ import time
 import scipy as sp
 import numpy as np
 
-from fast_pq import PQ, distances
+from fast_pq import FastPQ
 
 n, d, k, dpb = 16 * 1000, 128, 1000, 2
 print(f'{n=}, {d=}, queries={k}, dims_per_block={dpb}')
@@ -17,7 +17,7 @@ trus = sp.spatial.distance.cdist(qs, X).argmin(axis=1)
 t0 = time.time() - start
 
 print("Fitting PQ")
-pq = PQ(dims_per_block=dpb)
+pq = FastPQ(dims_per_block=dpb)
 data = pq.fit_transform(X)
 
 print("Querying")
@@ -25,11 +25,11 @@ t1, t2 = 0, 0
 places = []
 for q, tru in zip(qs, trus):
     start = time.time()
-    tables, scale = pq.transform_query(q)
+    dtable = pq.distance_table(q)
     t1 += time.time() - start
 
     start = time.time()
-    est8 = distances(data, tables)
+    est8 = dtable.estimate_distances(data)
     t2 += time.time() - start
 
     # print('Saturation degree:', np.sum(est8 == 255)/est8.size)

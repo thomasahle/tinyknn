@@ -33,7 +33,7 @@ def _slow_pq(data0, tables0):
     data = transform_data(data0)
     tables = transform_tables(tables0)
     out = np.zeros(2 * len(data), dtype=np.uint64)
-    query_pq_sse(data, tables, out)
+    query_pq_sse(data, tables, out, False)
     res = out.view(np.uint8)
     assert res.shape[0] == data0.shape[0]
     return res

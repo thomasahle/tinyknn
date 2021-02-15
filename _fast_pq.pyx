@@ -1,5 +1,7 @@
 #cython: boundscheck=False, wraparound=False, nonecheck=False, cdivision=True, language_level=3
 
+from libcpp cimport bool
+
 cdef extern from *:
     ctypedef int uint64_t "__uint64_t"
     ctypedef int uint128_t "__uint128_t"
@@ -53,7 +55,7 @@ cdef union u128:
 
 # We can use pshufb to do 16 1byte lookups in one operation.
 # See https://arxiv.org/pdf/1812.09162.pdf
-cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[::1] out) nogil:
+cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[::1] out, bool signd) nogil:
     ''' Given a N x D dataset quantized into byte sizes chunks,
         looks up each value in a table out outputs into `out`. '''
     # For each block (say 50) there is one code in data (say data[i,j]) of 4 bits.
@@ -85,45 +87,39 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[::1
     # the results. That would (hopefully) allow the table to be kept in registers.
     # It would also help prevent lane saturation.
 
-    # Format for table:
-    # uint128[2*d]
     cdef:
-        int n = data.shape[0]
-        int block_size = data.shape[1]//2 # We read two 64bit chunks at a time
         int i, j
         __m128i hi_table, lo_table, block_dists
         __m128i block, block_masked, lo_block, hi_block, dists
         uint64_t low_mask64 = 0x0f0f0f0f0f0f0f0f
-        __m128i low_mask = _mm_set_epi64x(low_mask64, low_mask64)
+        __m128i low_mask = _mm_set_epi64x(low_mask64, low_mask64)   # Mask low nibbles
 
-    for i in range(n):
-        # Since distances are positive, but we add as signed values, maybe we
-        # could get some extra precision by initializaing this to -128 in each lane?
-        #block_dists = _mm_set_epi64x(0, 0)
-        block_dists = _mm_setzero_si128()
-        for j in range(block_size):
-            # Do we need to use _mm_loadu_si128 or _mm_loadu_si128 to load data?
+    for i in range(data.shape[0]):
+        block_dists = _mm_setzero_si128()                           # block_dists = [0]*16
+        # We read two 64bit chunks at a time
+        for j in range(data.shape[1]//2):
+            # Do we need to use _mm_loadu_si128 or _mm_lddqu_si128 to load data?
             # I think they are only needed when data can be unaligned, but if we
             # use a numpy uint128, won't it be aligned?
             block = _mm_loadu_si128(<__m128i*> &data[i][2*j])
             # Low comps
-            lo_table = _mm_loadu_si128(<__m128i*> &tables[4*j])
-            block_masked = _mm_and_si128(block, low_mask);
-            dists = _mm_shuffle_epi8(lo_table, block_masked)
-            #dists = _mm_shuffle_epu8(lo_table, block & low_mask)
-            # Use epi instead of epu for signed addition
-            block_dists = _mm_adds_epu8(block_dists, dists)
+            lo_table = _mm_loadu_si128(<__m128i*> &tables[4*j])     # load 128 bits
+            block_masked = _mm_and_si128(block, low_mask);          # & low_mask
+            dists = _mm_shuffle_epi8(lo_table, block_masked)        # table lookup
+            # Hopefully this will be specialized by the compiler
+            if signd:
+                block_dists = _mm_adds_epi8(block_dists, dists)     # block_dists += dists
+            else: block_dists = _mm_adds_epu8(block_dists, dists)
             # High comps
-            hi_table = _mm_loadu_si128(<__m128i*> &tables[4*j+2])
-            block_masked = _mm_srli_epi64(block, 4) # >> 4
-            block_masked = _mm_and_si128(block_masked, low_mask) # & low_mask
-            dists = _mm_shuffle_epi8(hi_table, block_masked)
-            #dists = _mm_shuffle_epu8(hi_table, (block >> 4) & low_mask)
-            block_dists = _mm_adds_epu8(block_dists, dists)
-        # caller side?
-        #out[2*i] = <uint128_t>block_dists
-        out[2*i]   = _mm_extract_epi64(block_dists, 0)
-        out[2*i+1] = _mm_extract_epi64(block_dists, 1)
+            hi_table = _mm_loadu_si128(<__m128i*> &tables[4*j+2])   # load 128 bits
+            block_masked = _mm_srli_epi64(block, 4)                 # >> 4
+            block_masked = _mm_and_si128(block_masked, low_mask)    # & low_mask
+            dists = _mm_shuffle_epi8(hi_table, block_masked)        # table lookup
+            if signd:
+                block_dists = _mm_adds_epi8(block_dists, dists)     # block_dists += dists
+            else: block_dists = _mm_adds_epu8(block_dists, dists)
+        out[2*i]   = _mm_extract_epi64(block_dists, 0)              # out[2i] = block_dists[0:8]
+        out[2*i+1] = _mm_extract_epi64(block_dists, 1)              # out[2i] = block_dists[8:16]
 
 
 
