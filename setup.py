@@ -15,6 +15,7 @@ setup(
                 "-Wno-deprecated-declarations",
                 "-Wno-deprecated-api",
                 "-mavx",
+                "-m64",
                 #'-mprefetchwt1'
             ],
             language="c++",
