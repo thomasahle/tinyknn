@@ -7,7 +7,6 @@ from _fast_pq import query_pq_sse, estimate_pq_sse
 def pad(arr, mults):
     new_shape = tuple(s + (-s) % m for s, m in zip(arr.shape, mults))
     new_arr = np.zeros(new_shape, dtype=arr.dtype)
-    new_arr[:] = 10**5 # For distance at least we can just place the padding elements far away.
     new_arr[tuple(slice(0, s) for s in arr.shape)] = arr
     return new_arr
 
@@ -135,13 +134,10 @@ class _FastDistanceTable:
         indices = np.zeros((rescore,), dtype=np.int32)
         values = np.zeros((rescore,), dtype=np.int32)
         query_pq_sse(transformed_data, self.tables, indices, values, True)
-        print(indices, values, data.shape, transformed_data.shape)
         est = self.estimate_distances((true_n, transformed_data))
-        print('est', est.argsort(), np.array(sorted(est)))
         if rescore > k:
             diff = data[indices] - self.q
-            #dists = np.einsum('ij,ij->i', diff, diff)
-            dists = (diff * diff).sum(axis=1)
+            dists = np.einsum('ij,ij->i', diff, diff)
             best = bottom_k(dists, k=k)
             return indices[best], dists[best]
         return indices, values
