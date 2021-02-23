@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.cluster
 from _transform import transform_data, transform_tables
-from _fast_pq import query_pq_sse
+from _fast_pq import query_pq_sse, estimate_pq_sse
 
 
 def pad(arr, mults):
@@ -57,10 +57,7 @@ class FastPQ:
     def fit_transform(self, data):
         return self.fit(data).transform(data)
 
-    def distance_table(
-        self,
-        q,
-    ):
+    def distance_table(self, q):
         q = pad(q, (2 * self.dims_per_block,))
         dpb = self.dims_per_block
         n_blocks = q.size / dpb
@@ -102,7 +99,7 @@ class _FastDistanceTable:
         true_n, transformed_data = transformed_data
         if out is None:
             out = np.zeros(2 * len(transformed_data), dtype=np.uint64)
-        query_pq_sse(transformed_data, self.tables, out, True)
+        estimate_pq_sse(transformed_data, self.tables, out, True)
         res = out.view(np.int8)
         res = res[:true_n]  # Trim padding elements
         if not rescale:

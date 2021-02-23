@@ -2,7 +2,7 @@ import random
 import numpy as np
 from functools import reduce
 
-from _fast_pq import query_pq_sse
+from _fast_pq import estimate_pq_sse
 from _transform import transform_data, transform_tables
 
 
@@ -36,6 +36,7 @@ def sat8_add(x, y):
     if x+y < -128: return -128
     return x+y
 
+
 def _test_rand_inner_signed(n, d):
     dat = [[random.randrange(16) for _ in range(d)] for _ in range(n)]
     # We saturate at 127, so no reason to have numbers much bigger than 1/sqrt(d) of that.
@@ -53,7 +54,8 @@ def _slow_pq(data0, tables0, signed):
     data = transform_data(data0)
     tables = transform_tables(tables0)
     out = np.zeros(2 * len(data), dtype=np.uint64)
-    query_pq_sse(data, tables, out, signed)
+    estimate_pq_sse(data, tables, out, signed)
+    print(out)
     res = out.view(np.uint8)
     assert res.shape[0] == data0.shape[0]
     return res
