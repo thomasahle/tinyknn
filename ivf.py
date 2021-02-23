@@ -1,5 +1,6 @@
 import numpy as np
 import sklearn.cluster
+from fast_pq import bottom_k
 
 
 def cdist(X, Y, chunk=100):
@@ -22,6 +23,12 @@ def brute(X, Y, k, chunk=100):
         part = np.add.outer(nx[i : i + chunk], ny) - 2 * X[i : i + chunk] @ Y.T
         res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
     return res
+
+
+def brute1(x, Y, k):
+    diff = Y - x
+    dists = np.einsum('ij,ij->i', diff, diff)
+    return dists.argpartition(kth=k)[:k]
 
 
 class IVF:
@@ -90,10 +97,12 @@ class IVF:
             self.lists[i] = np.ascontiguousarray(X[mask])
             self.pq_transformed_points[i] = self.pq.transform(self.lists[i])
             self.ids[i] = np.arange(X.shape[0])[mask]
+        
+        self.data = X
 
         return self
 
-    def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+    def query_old(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
         q = np.ascontiguousarray(q, dtype=np.float32)
         if self.metric == "angular":
             q /= np.linalg.norm(q)
@@ -127,3 +136,40 @@ class IVF:
             return js
         best = np.argpartition(dists, kth=k)[:k]
         return js[best]
+
+    def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+        q = np.ascontiguousarray(q, dtype=np.float32)
+        if self.metric == "angular":
+            q /= np.linalg.norm(q)
+        dtable = self.pq.distance_table(q)
+
+        
+
+        # Find best centers
+        #top = brute1(q, self.active_centers, n_probes)
+        #top = bottom_k(dtable.estimate_distances(self.pq_transformed_centers), n_probes)
+        c_dists = dtable.estimate_distances(self.pq_transformed_centers)
+        top = bottom_k(c_dists, 2*n_probes+10)
+        print(c_dists[top])
+        top = top[brute1(q, self.active_centers[top], k=n_probes)]
+        
+        # TODO: Preallocate space for js and dists rather than dynamically like this.
+        # (Even better: Keep that space allocated between queries)
+        js, dists = [], []
+        for i in top:
+            sub_dists = dtable.estimate_distances(self.pq_transformed_points[i])
+            js.append(self.ids[i])
+            dists.append(sub_dists)
+        js, dists = np.concatenate(js), np.concatenate(dists)
+
+        # Merge datas
+        if k >= len(js):
+            return js
+        rescore = min(2*k+10, len(js))
+        best_ids_1 = bottom_k(dists, rescore)
+        print(dists[best_ids_1])
+        print()
+        diffs = self.data[js[best_ids_1]] - q
+        real_dists = (diffs*diffs).sum(axis=1)
+        best = bottom_k(real_dists, k)
+        return js[best_ids_1[best]]
