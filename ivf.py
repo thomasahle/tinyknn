@@ -106,7 +106,7 @@ class IVF:
         #    return self.ids[i][js]
 
         # Find best centers
-        top, _ = dtable.top(
+        top, _ = dtable.ctop(
             self.pq_transformed_centers, self.active_centers, k=n_probes
         )
         # TODO: Preallocate space for js and dists rather than dynamically like this.
@@ -114,7 +114,7 @@ class IVF:
         js, dists = [], []
         for i in top:
             sub_n, _ = self.lists[i].shape
-            sub_js, sub_dists = dtable.top(
+            sub_js, sub_dists = dtable.ctop(
                 self.pq_transformed_points[i], self.lists[i], k=k
             )
             # Translate into global indexing
