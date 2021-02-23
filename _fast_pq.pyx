@@ -37,6 +37,7 @@
 cdef extern from *:
     ctypedef int uint64_t "__uint64_t"
     ctypedef int uint128_t "__uint128_t"
+    ctypedef int byte "__int8_t"
 
 from libcpp cimport bool
 
@@ -92,11 +93,9 @@ cdef extern from "immintrin.h":
     # Create mask from the most significant bit of each 8-bit element in a,
     # and store the result in dst.
     int _mm_movemask_epi8 (__m128i a) nogil
-    # Count the number of leading zero bits in unsigned 32-bit integer a,
-    # and return that count in dst.
-    unsigned int _lzcnt_u32 (unsigned int a) nogil
+    # Count the number of trailing zero bits in unsigned 64-bit integer a, and return that count in dst.
+    int _mm_tzcnt_32 (unsigned int a) nogil
 
-from cython cimport view
 
 cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[::1] out, bool signd) nogil:
     cdef:
@@ -105,19 +104,18 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[
 
     for i in range(data.shape[0]):
         # We can't just pass data[i] here, since that would allocate a new slice
-        block_dists = compute_block_dists(&data[i,0], data.shape[1]//2, tables, signd)
+        block_dists = compute_block_dists(&data[i, 0], data.shape[1]//2, tables, signd)
         out[2*i]   = _mm_extract_epi64(block_dists, 0)              # out[2i] = block_dists[0:8]
         out[2*i+1] = _mm_extract_epi64(block_dists, 1)              # out[2i] = block_dists[8:16]
 
 
-
-cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices, int[::1] vals, bool signd) nogil:
+cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices, int[::1] vals, bool signd):
     ''' Given a N x D dataset quantized into byte sizes chunks,
         looks up each value in a table out outputs into `out`. '''
     cdef:
-        int i
+        int i, j
         __m128i block_dists, top_bound, cmp_mask
-        int cmp_bits, cmp_low, cmp_high, pos
+        int cmp_bits, cmp_low, cmp_high, pos, tz, bits
         uint64_t dists
 
     # Initialize "heap". K = is the number of top values we want
@@ -134,23 +132,23 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
 
     for i in range(data.shape[0]):
         block_dists = compute_block_dists(&data[i,0], data.shape[1]//2, tables, signd)
-        #block_dists = compute_block_dists(data[i], tables, signd)
         cmp_mask = _mm_cmplt_epi8(block_dists, top_bound)
         cmp_bits = _mm_movemask_epi8(cmp_mask)
         if cmp_bits:
-            cmp_low, cmp_high = cmp_bits & 0xff, cmp_bits >> 8
-            if cmp_low:
-                dists = _mm_extract_epi64(block_dists, 0)
-                while cmp_low:
-                    pos = _lzcnt_u32(cmp_low)
-                    cmp_low, dists = cmp_low >> pos, dists >> 8*pos
-                    insert(indices, vals, i*16+pos, dists & 0xff)
-            if cmp_high:
-                dists = _mm_extract_epi64(block_dists, 1)
-                while cmp_low:
-                    pos = _lzcnt_u32(cmp_high)
-                    cmp_low, dists = cmp_low >> pos, dists >> 8*pos
-                    insert(indices, vals, i*16+8+pos, dists & 0xff)
+            for j in range(2):
+                bits = (cmp_bits >> 8*j) & 0xff
+                if bits:
+                    if j == 0: dists = _mm_extract_epi64(block_dists, 0)
+                    if j == 1: dists = _mm_extract_epi64(block_dists, 1)
+                    pos = i * 16 + 8*j
+                    while bits:
+                        tz = _mm_tzcnt_32(bits)
+                        pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
+                        if signd:
+                            insert(indices, vals, pos, <byte>(dists & 0xff))
+                        else:
+                            insert(indices, vals, pos, dists & 0xff)
+                        pos, bits, dists = pos+1, bits >> 1, dists >> 8
             # Update bound vector to equal 16 times the largest distance in the array
             top_bound = _mm_set1_epi8(vals[-1])
 
@@ -193,7 +191,8 @@ cdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     for j in range(indices.shape[0]):
         # Insert the new value at the found location, then continue "recursively"
-        if vals[j] > v:
+        if vals[j] > v or indices[j] == -1:
+        #if vals[j] >= v:
             vals[j], v = v, vals[j]
             indices[j], i = i, indices[j]
 
