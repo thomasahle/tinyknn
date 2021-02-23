@@ -94,7 +94,7 @@ cdef extern from "immintrin.h":
     # and store the result in dst.
     int _mm_movemask_epi8 (__m128i a) nogil
     # Count the number of trailing zero bits in unsigned 64-bit integer a, and return that count in dst.
-    int _mm_tzcnt_32 (unsigned int a) nogil
+    int __tzcnt_u32 (unsigned int a) nogil
 
 
 cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[::1] out, bool signd) nogil:
@@ -142,7 +142,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
                     if j == 1: dists = _mm_extract_epi64(block_dists, 1)
                     pos = i * 16 + 8*j
                     while bits:
-                        tz = _mm_tzcnt_32(bits)
+                        tz = __tzcnt_u32(bits)
                         pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
                         if signd:
                             insert(indices, vals, pos, <byte>(dists & 0xff))
