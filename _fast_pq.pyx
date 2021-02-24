@@ -97,7 +97,8 @@ cdef extern from "immintrin.h":
     int __tzcnt_u32 (unsigned int a) nogil
 
 
-cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[::1] out, bool signd) nogil:
+cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
+                           uint64_t[::1] out, bool signd) nogil:
     cdef:
         int i
         __m128i block_dists
@@ -109,7 +110,8 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, uint64_t[
         out[2*i+1] = _mm_extract_epi64(block_dists, 1)              # out[2i] = block_dists[8:16]
 
 
-cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices, int[::1] vals, bool signd):
+cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices,
+                        int[::1] vals, bool signd) nogil:
     ''' Given a N x D dataset quantized into byte sizes chunks,
         looks up each value in a table out outputs into `out`. '''
     cdef:
@@ -132,7 +134,13 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
 
     for i in range(data.shape[0]):
         block_dists = compute_block_dists(&data[i,0], data.shape[1]//2, tables, signd)
-        cmp_mask = _mm_cmplt_epi8(block_dists, top_bound)
+        if signd:
+            cmp_mask = _mm_cmplt_epi8(block_dists, top_bound)
+        else:
+            # There is no unsigned comparison in SSE, which is annoying.
+            cmp_mask = _mm_cmplt_epi8(
+                _mm_add_epi8 (block_dists, _mm_set1_epi8(-128)),
+                _mm_add_epi8 (top_bound, _mm_set1_epi8(-128)))
         cmp_bits = _mm_movemask_epi8(cmp_mask)
         if cmp_bits:
             for j in range(2):
@@ -143,7 +151,9 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
                     pos = i * 16 + 8*j
                     while bits:
                         tz = __tzcnt_u32(bits)
+                        #print(pos, bits, tz)
                         pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
+                        #print('insert', pos, (dists&0xff))
                         if signd:
                             insert(indices, vals, pos, <byte>(dists & 0xff))
                         else:
@@ -153,7 +163,8 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
             top_bound = _mm_set1_epi8(vals[-1])
 
 
-cdef inline __m128i compute_block_dists(uint64_t* data, int block_size, uint64_t[::1] tables, bool signd) nogil:
+cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
+                                        uint64_t[::1] tables, bool signd) nogil:
     cdef:
         int j
         __m128i block_dists
@@ -192,7 +203,6 @@ cdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
     for j in range(indices.shape[0]):
         # Insert the new value at the found location, then continue "recursively"
         if vals[j] > v or indices[j] == -1:
-        #if vals[j] >= v:
             vals[j], v = v, vals[j]
             indices[j], i = i, indices[j]
 

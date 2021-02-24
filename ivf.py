@@ -102,7 +102,7 @@ class IVF:
 
         return self
 
-    def query_old(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+    def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
         q = np.ascontiguousarray(q, dtype=np.float32)
         if self.metric == "angular":
             q /= np.linalg.norm(q)
@@ -131,13 +131,14 @@ class IVF:
             dists.append(sub_dists)
 
         # Merge datas
+        if not js: return js # Concatenate doesn't work on empty lists
         js, dists = np.concatenate(js), np.concatenate(dists)
         if k >= len(js):
             return js
         best = np.argpartition(dists, kth=k)[:k]
         return js[best]
 
-    def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+    def query_new(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
         q = np.ascontiguousarray(q, dtype=np.float32)
         if self.metric == "angular":
             q /= np.linalg.norm(q)

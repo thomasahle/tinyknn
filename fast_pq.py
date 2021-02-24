@@ -6,6 +6,9 @@ from _fast_pq import query_pq_sse, estimate_pq_sse
 
 def pad(arr, mults):
     new_shape = tuple(s + (-s) % m for s, m in zip(arr.shape, mults))
+    # TODO: It would be nice to pad using the code with largest possible distance
+    # in each dimension, so as to maximiize the likelihood of not seeing any of them
+    # in the top values.
     new_arr = np.zeros(new_shape, dtype=arr.dtype)
     new_arr[tuple(slice(0, s) for s in arr.shape)] = arr
     return new_arr
@@ -25,6 +28,7 @@ class FastPQ:
         self.center_norms_sq = None  # Shape: (n_blocks, 16)
 
     def fit(self, data):
+        assert data.size > 0, "Can't fit no data"
         data = pad(data, (16, 2 * self.dims_per_block))
         n, d = data.shape
         assert d % self.dims_per_block == 0
@@ -128,18 +132,21 @@ class _FastDistanceTable:
 
     def ctop(self, transformed_data, data, k=1, rescore=None):
         true_n, transformed_data = transformed_data
+        k = min(k, true_n)
         if not rescore:
-            rescore = min(2 * k + 10, len(data))
+            rescore = min(2 * k + 10, true_n)
         assert true_n >= rescore >= k
         indices = np.zeros((rescore,), dtype=np.int32)
         values = np.zeros((rescore,), dtype=np.int32)
         query_pq_sse(transformed_data, self.tables, indices, values, True)
-        est = self.estimate_distances((true_n, transformed_data))
+        good_indices = indices<true_n # TODO: We remove paddinig in a kinda dumb way
+        indices = indices[good_indices]
         if rescore > k:
-            diff = data[indices] - self.q
+            diff = data[indices] - self.q[:data.shape[1]] # Remove padding from q
             dists = np.einsum('ij,ij->i', diff, diff)
             best = bottom_k(dists, k=k)
             return indices[best], dists[best]
+        values = values[good_indices]
         return indices, values
 
 
