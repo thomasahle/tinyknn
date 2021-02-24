@@ -61,5 +61,5 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
 @pytest.mark.filterwarnings("ignore:Number of distinct clusters")
 def test_small():
     np.random.seed(10)
-    assert _test_recall_inner(15, 10, 10, 2, 10, 'euclidean', 1) > .05
+    assert _test_recall_inner(15, 10, 30, 2, 10, 'euclidean', 1) > .05
 
