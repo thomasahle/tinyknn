@@ -27,7 +27,7 @@ class FastPQ:
         self.centers = None  # Shape: (n_blocks, 16, dims_per_block)
         self.center_norms_sq = None  # Shape: (n_blocks, 16)
 
-    def fit(self, data):
+    def fit(self, data, verbose=False):
         assert data.size > 0, "Can't fit no data"
         data = pad(data, (16, 2 * self.dims_per_block))
         n, d = data.shape
@@ -37,8 +37,13 @@ class FastPQ:
         cl = sklearn.cluster.KMeans(16, n_init=1)
         centers = []
         for i in range(d // self.dims_per_block):
+            if verbose:
+                print(f'Fitting block {i}')
             cl.fit(data[:, i * dpb : (i + 1) * dpb])
-            centers.append(cl.cluster_centers_)
+            # It doesn't give too much precision to do separate centers for each block,
+            # but durnig queries we need seperate distance tables per block anyway, so
+            # it doesn't cost us much.
+            centers.append(cl.cluster_centers_.copy())
         self.centers = np.array(centers, dtype=np.float32)
         self.center_norms_sq = np.linalg.norm(centers, axis=2) ** 2
         return self
@@ -70,6 +75,7 @@ class FastPQ:
 
         # Center the data in the range [-128, 128]
         # TODO: Is this the best scaling formula?
+        # TODO: Would this be faster if we used the same centers for each block?
         dists = self.center_norms_sq - 2 * np.einsum("ijk,ik->ij", self.centers, parts)
         # dists += (parts * parts).sum(axis=1, keepdims=True)
         # shift = np.mean(dists)

@@ -137,3 +137,5 @@ todo
 *.npy
 *.out
 *.prof
+*.swp
+*.pickle

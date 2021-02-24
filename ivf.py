@@ -49,7 +49,7 @@ class IVF:
 
         n, d = X.shape
         X = np.ascontiguousarray(X, dtype=np.float32)
-        cl = sklearn.cluster.KMeans(n_clusters=self.n_clusters, n_init=1)
+        cl = sklearn.cluster.KMeans(n_clusters=self.n_clusters, n_init=1, verbose=verbose)
 
         if verbose:
             print("Fitting IVF cluster centers")
@@ -69,7 +69,7 @@ class IVF:
         # We use a single product quantizer for everything
         if verbose:
             print("Fitting PQ")
-        self.pq.fit(X)
+        self.pq.fit(X, verbose=verbose)
 
         return self
 
@@ -94,6 +94,8 @@ class IVF:
             mask = labels == i
             # TODO: QuckADC stores the resiuals (X[mask] - center) here.
             # Is that better? That would require seperate PQs for each cluster...
+            # That is, even if we used the same centers we would still have to
+            # compute a seperate distance table for each partition we visit.
             self.lists[i] = np.ascontiguousarray(X[mask])
             self.pq_transformed_points[i] = self.pq.transform(self.lists[i])
             self.ids[i] = np.arange(X.shape[0])[mask]
@@ -138,7 +140,20 @@ class IVF:
         best = np.argpartition(dists, kth=k)[:k]
         return js[best]
 
-    def query_new(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+    # Ide til ny query:
+    # First find centers, using plenty of rescoring. Maybe even just precise.
+    # Then run query_sse on each cluster with a sufficiently large k.
+    # Let t be the size of the largest cluster.
+    # After each query_sse replace indices < t with idmap[ids]+t.
+    # Don't change the value list.
+    # Once done, subtract t from id list to get a list of the real ids.
+    # This is then used for rescoring.
+    #
+    # If I start having a performance problem due to the update time of the
+    # insertion sort, maybe I should start using a real priority queue.
+    # I guess I can implement that quickly enough.
+
+    def query2(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
         q = np.ascontiguousarray(q, dtype=np.float32)
         if self.metric == "angular":
             q /= np.linalg.norm(q)
@@ -151,7 +166,7 @@ class IVF:
         #top = bottom_k(dtable.estimate_distances(self.pq_transformed_centers), n_probes)
         c_dists = dtable.estimate_distances(self.pq_transformed_centers)
         top = bottom_k(c_dists, 2*n_probes+10)
-        print(c_dists[top])
+        #print(c_dists[top])
         top = top[brute1(q, self.active_centers[top], k=n_probes)]
         
         # TODO: Preallocate space for js and dists rather than dynamically like this.
@@ -168,8 +183,8 @@ class IVF:
             return js
         rescore = min(2*k+10, len(js))
         best_ids_1 = bottom_k(dists, rescore)
-        print(dists[best_ids_1])
-        print()
+        #print(dists[best_ids_1])
+        #print()
         diffs = self.data[js[best_ids_1]] - q
         real_dists = (diffs*diffs).sum(axis=1)
         best = bottom_k(real_dists, k)
