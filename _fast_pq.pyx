@@ -202,7 +202,8 @@ cdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     for j in range(indices.shape[0]):
         # Insert the new value at the found location, then continue "recursively"
-        if vals[j] > v or indices[j] == -1:
+        #if vals[j] > v or indices[j] == -1:
+        if vals[j] > v:
             vals[j], v = v, vals[j]
             indices[j], i = i, indices[j]
 
