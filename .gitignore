@@ -134,6 +134,6 @@ dmypy.json
 
 # Other
 todo
-.npy
-.out
-.prof
+*.npy
+*.out
+*.prof
