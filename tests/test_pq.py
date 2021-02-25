@@ -74,7 +74,7 @@ def _test_topk_inner(n, m, d, dpb, signed):
         print("esti", est.argsort(kind="stable"))
         print("topi", indices)
         print("estv", sorted(est))
-        print("topv", values)
+        print("topv", sorted(values))
         print()
 
         # Remove padding, and ignore

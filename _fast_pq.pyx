@@ -111,7 +111,7 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
 
 
 cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices,
-                        int[::1] vals, bool signd):
+                        int[::1] vals, bool signd) nogil:
     ''' Given a N x D dataset quantized into byte sizes chunks,
         looks up each value in a table out outputs into `out`. '''
     cdef:
@@ -143,6 +143,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
                 _mm_add_epi8 (top_bound, _mm_set1_epi8(-128)))
         cmp_bits = _mm_movemask_epi8(cmp_mask)
         if cmp_bits:
+            #print('cmp_bits', bin(cmp_bits))
             for j in range(2):
                 bits = (cmp_bits >> 8*j) & 0xff
                 if bits:
@@ -151,17 +152,18 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
                     pos = i * 16 + 8*j
                     while bits:
                         tz = __tzcnt_u32(bits)
-                        #print(pos, bits, tz)
+                        #print(pos, bin(dists), bin(bits), tz)
                         pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
-                        #print('insert', pos, (dists&0xff))
+                        #print('insert', pos, signd, (dists&0xff), <byte>(dists & 0xff))
                         if signd:
                             insert(indices, vals, pos, <byte>(dists & 0xff))
                         else:
                             insert(indices, vals, pos, dists & 0xff)
-                        print(list(vals))
+                        #print(list(vals))
                         pos, bits, dists = pos+1, bits >> 1, dists >> 8
             # Update bound vector to equal 16 times the largest distance in the array
-            top_bound = _mm_set1_epi8(vals[-1])
+            # top_bound = _mm_set1_epi8(vals[-1]) # With insertion sort, the max is at the end
+            top_bound = _mm_set1_epi8(vals[0]) # If we use the heap, the max is at the start
 
 
 cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
@@ -235,7 +237,8 @@ cdef void insert_insort(int[::1] indices, int[::1] vals, int i, int v) nogil:
     indices[j], vals[j] = i, v
 
 
-cdef void insert_heap_old(int[::1] indices, int[::1] vals, int i, int v):
+# We use cpdef so we can unittest
+cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
     # since that's the one we are kicking out. Thus this is a max-heap with
@@ -260,7 +263,7 @@ cdef void insert_heap_old(int[::1] indices, int[::1] vals, int i, int v):
     indices[j], vals[j] = i, v
 
 
-cpdef void insert(int[::1] indices, int[::1] vals, int i, int v):
+cpdef void insert_heap_2(int[::1] indices, int[::1] vals, int i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
     # since that's the one we are kicking out. Thus this is a max-heap with
