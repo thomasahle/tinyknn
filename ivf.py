@@ -27,7 +27,7 @@ def brute(X, Y, k, chunk=100):
 
 def brute1(x, Y, k):
     diff = Y - x
-    dists = np.einsum('ij,ij->i', diff, diff)
+    dists = np.einsum("ij,ij->i", diff, diff)
     return dists.argpartition(kth=k)[:k]
 
 
@@ -49,7 +49,9 @@ class IVF:
 
         n, d = X.shape
         X = np.ascontiguousarray(X, dtype=np.float32)
-        cl = sklearn.cluster.KMeans(n_clusters=self.n_clusters, n_init=1, verbose=verbose)
+        cl = sklearn.cluster.KMeans(
+            n_clusters=self.n_clusters, n_init=1, verbose=verbose
+        )
 
         if verbose:
             print("Fitting IVF cluster centers")
@@ -99,7 +101,7 @@ class IVF:
             self.lists[i] = np.ascontiguousarray(X[mask])
             self.pq_transformed_points[i] = self.pq.transform(self.lists[i])
             self.ids[i] = np.arange(X.shape[0])[mask]
-        
+
         self.data = X
 
         return self
@@ -133,7 +135,8 @@ class IVF:
             dists.append(sub_dists)
 
         # Merge datas
-        if not js: return js # Concatenate doesn't work on empty lists
+        if not js:
+            return js  # Concatenate doesn't work on empty lists
         js, dists = np.concatenate(js), np.concatenate(dists)
         if k >= len(js):
             return js
@@ -153,22 +156,23 @@ class IVF:
     # insertion sort, maybe I should start using a real priority queue.
     # I guess I can implement that quickly enough.
 
+    def query3(self, q, k, n_probes=1):
+        dtable = pq.distance_table(q)
+
     def query2(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
         q = np.ascontiguousarray(q, dtype=np.float32)
         if self.metric == "angular":
             q /= np.linalg.norm(q)
         dtable = self.pq.distance_table(q)
 
-        
-
         # Find best centers
-        #top = brute1(q, self.active_centers, n_probes)
-        #top = bottom_k(dtable.estimate_distances(self.pq_transformed_centers), n_probes)
+        # top = brute1(q, self.active_centers, n_probes)
+        # top = bottom_k(dtable.estimate_distances(self.pq_transformed_centers), n_probes)
         c_dists = dtable.estimate_distances(self.pq_transformed_centers)
-        top = bottom_k(c_dists, 2*n_probes+10)
-        #print(c_dists[top])
+        top = bottom_k(c_dists, 2 * n_probes + 10)
+        # print(c_dists[top])
         top = top[brute1(q, self.active_centers[top], k=n_probes)]
-        
+
         # TODO: Preallocate space for js and dists rather than dynamically like this.
         # (Even better: Keep that space allocated between queries)
         js, dists = [], []
@@ -181,11 +185,11 @@ class IVF:
         # Merge datas
         if k >= len(js):
             return js
-        rescore = min(2*k+10, len(js))
+        rescore = min(2 * k + 10, len(js))
         best_ids_1 = bottom_k(dists, rescore)
-        #print(dists[best_ids_1])
-        #print()
+        # print(dists[best_ids_1])
+        # print()
         diffs = self.data[js[best_ids_1]] - q
-        real_dists = (diffs*diffs).sum(axis=1)
+        real_dists = (diffs * diffs).sum(axis=1)
         best = bottom_k(real_dists, k)
         return js[best_ids_1[best]]

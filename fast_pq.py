@@ -38,7 +38,7 @@ class FastPQ:
         centers = []
         for i in range(d // self.dims_per_block):
             if verbose:
-                print(f'Fitting block {i}')
+                print(f"Fitting block {i}")
             cl.fit(data[:, i * dpb : (i + 1) * dpb])
             # It doesn't give too much precision to do separate centers for each block,
             # but durnig queries we need seperate distance tables per block anyway, so
@@ -95,15 +95,31 @@ class FastPQ:
         # The transformation doesn't care about the sign, so we just use uint
         table = table.astype(np.uint8)
         trans = transform_tables(table)
-        return _FastDistanceTable(q, trans, shift, scale)
+        return _FastDistanceTable(q, trans, shift, scale, signed=True)
+
+    def udistance_table(self, q):
+        # Experimental
+        q = pad(q, (2 * self.dims_per_block,))
+        dpb = self.dims_per_block
+        n_blocks = q.size / dpb
+        parts = q.reshape(-1, dpb)
+        dists = self.center_norms_sq - 2 * np.einsum("ijk,ik->ij", self.centers, parts)
+        shift = np.min(dists)
+        dists -= shift
+        scale = 255 / (np.max(dists) * np.sqrt(n_blocks))
+        table *= scale
+        table = table.astype(np.uint8)
+        trans = transform_tables(table)
+        return _FastDistanceTable(q, trans, shift, scale, signed=False)
 
 
 class _FastDistanceTable:
-    def __init__(self, q, transformed_tables, mean, scale):
+    def __init__(self, q, transformed_tables, mean, scale, signed):
         self.q = q
         self.tables = transformed_tables
         self.mean = mean
         self.scale = scale
+        self.signed = signed
 
     def estimate_distances(self, transformed_data, out=None, rescale=False):
         true_n, transformed_data = transformed_data
@@ -136,6 +152,29 @@ class _FastDistanceTable:
         best = bottom_k(dists, k=k)
         return guess[best], dists[best]
 
+    def ctops(self, transformed_datas, data, k=1, rescore=None):
+        true_n, transformed_data = transformed_data
+        k = min(k, true_n)
+        if not rescore:
+            rescore = min(2 * k + 10, true_n)
+        assert true_n >= rescore >= k
+
+        # Basically, these two arrays define a heap?
+        indices = np.zeros((rescore,), dtype=np.int32)
+        values = np.zeros((rescore,), dtype=np.int32)
+        for true_n, transformed_data in transformed_datas:
+            query_pq_sse(transformed_data, self.tables, indices, values, True)
+
+        good_indices = indices < true_n  # TODO: We remove paddinig in a kinda dumb way
+        indices = indices[good_indices]
+        if rescore > k:
+            diff = data[indices] - self.q[: data.shape[1]]  # Remove padding from q
+            dists = np.einsum("ij,ij->i", diff, diff)
+            best = bottom_k(dists, k=k)
+            return indices[best], dists[best]
+        values = values[good_indices]
+        return indices, values
+
     def ctop(self, transformed_data, data, k=1, rescore=None):
         true_n, transformed_data = transformed_data
         k = min(k, true_n)
@@ -145,11 +184,11 @@ class _FastDistanceTable:
         indices = np.zeros((rescore,), dtype=np.int32)
         values = np.zeros((rescore,), dtype=np.int32)
         query_pq_sse(transformed_data, self.tables, indices, values, True)
-        good_indices = indices<true_n # TODO: We remove paddinig in a kinda dumb way
+        good_indices = indices < true_n  # TODO: We remove paddinig in a kinda dumb way
         indices = indices[good_indices]
         if rescore > k:
-            diff = data[indices] - self.q[:data.shape[1]] # Remove padding from q
-            dists = np.einsum('ij,ij->i', diff, diff)
+            diff = data[indices] - self.q[: data.shape[1]]  # Remove padding from q
+            dists = np.einsum("ij,ij->i", diff, diff)
             best = bottom_k(dists, k=k)
             return indices[best], dists[best]
         values = values[good_indices]

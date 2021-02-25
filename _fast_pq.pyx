@@ -111,7 +111,7 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
 
 
 cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices,
-                        int[::1] vals, bool signd) nogil:
+                        int[::1] vals, bool signd):
     ''' Given a N x D dataset quantized into byte sizes chunks,
         looks up each value in a table out outputs into `out`. '''
     cdef:
@@ -158,6 +158,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
                             insert(indices, vals, pos, <byte>(dists & 0xff))
                         else:
                             insert(indices, vals, pos, dists & 0xff)
+                        print(list(vals))
                         pos, bits, dists = pos+1, bits >> 1, dists >> 8
             # Update bound vector to equal 16 times the largest distance in the array
             top_bound = _mm_set1_epi8(vals[-1])
@@ -198,7 +199,7 @@ cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
     return block_dists
 
 
-cdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
+cdef void insert_old(int[::1] indices, int[::1] vals, int i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     for j in range(indices.shape[0]):
         # Insert the new value at the found location, then continue "recursively"
@@ -207,3 +208,75 @@ cdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
             vals[j], v = v, vals[j]
             indices[j], i = i, indices[j]
 
+
+cdef void insert_old2(int[::1] indices, int[::1] vals, int i, int v) nogil:
+    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
+    # We know we are going to be somewhere in the array, so we just
+    # set ourselves at the right end, then swap until we are in the
+    # right position.
+    cdef int j = indices.shape[0]-1
+    indices[j], vals[j] = i, v
+    while j != 0 and vals[j-1] > vals[j]:
+        vals[j-1], vals[j] = vals[j], vals[j-1]
+        indices[j-1], indices[j] = indices[j], indices[j-1]
+        j -= 1
+
+
+cdef void insert_insort(int[::1] indices, int[::1] vals, int i, int v) nogil:
+    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
+    # It seems silly to do all that swappnig. Rather just move things
+    # down and then eventually insert ourselves.
+    # This is still using that we know we belong at least at the end,
+    # since we always insert ourselves somewhere eventually.
+    cdef int j = indices.shape[0]-1
+    while j != 0 and vals[j-1] > v:
+        indices[j], vals[j] = indices[j-1], vals[j-1]
+        j -= 1
+    indices[j], vals[j] = i, v
+
+
+cdef void insert_heap_old(int[::1] indices, int[::1] vals, int i, int v):
+    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
+    # We need to easily be able to identify the largest element in the heap,
+    # since that's the one we are kicking out. Thus this is a max-heap with
+    # the largest value at 0.
+    cdef:
+        int n = indices.shape[0]
+        int j = 0
+        int nxt, l, r
+    while True:
+        l, r = 2*j+1, 2*j+2
+        if l < n and vals[l] > v:
+            # Swap with the largest of the two children
+            if r < n and vals[r] > vals[l]:
+                nxt = r
+            else: nxt = l
+        elif r < n and vals[r] > v:
+            nxt = r
+        else:
+            break
+        indices[j], vals[j] = indices[nxt], vals[nxt]
+        j = nxt
+    indices[j], vals[j] = i, v
+
+
+cpdef void insert(int[::1] indices, int[::1] vals, int i, int v):
+    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
+    # We need to easily be able to identify the largest element in the heap,
+    # since that's the one we are kicking out. Thus this is a max-heap with
+    # the largest value at 0.
+    cdef:
+        int n = indices.shape[0]
+        int j = 0
+        int nxt, l, r
+    indices[0], vals[0] = i, v
+    while True:
+        nxt = j
+        l, r = 2*j+1, 2*j+2
+        if l < n and vals[l] > vals[nxt]: nxt = l
+        if r < n and vals[r] > vals[nxt]: nxt = r
+        if nxt == j:
+            break
+        vals[nxt], vals[j] = vals[j], vals[nxt]
+        indices[nxt], indices[j] = indices[j], indices[nxt]
+        j = nxt
