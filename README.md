@@ -24,4 +24,4 @@ In this example Fast PQ is about 16 times faster than optmized scipy/numpy.
 The reason is that Fast PQ uses a trick called [Accelerated Nearest Neighbor Search with Qick ADC](https://dl.acm.org/doi/abs/10.1145/3078971.3078992)
 with which SIMD instructions are used to perform 16 inner product operations in a single instruction.
 
-![build](https://github.com/thomasahle/fast_pq/actions/workflows/testing.yml/badge.svg)
+[![build](https://github.com/thomasahle/fast_pq/actions/workflows/testing.yml/badge.svg)](https://github.com/thomasahle/fast_pq/actions/workflows/testing.yml)
