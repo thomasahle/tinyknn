@@ -104,7 +104,7 @@ class IVF:
 
         return self
 
-    def build(self, X, n_probes=1, verbose=False):
+    def build(self, X, n_probes=2, verbose=False):
         """
         Builds the data structure by associating each data point in X with its nearest n_probes cluster centers.
 
@@ -112,7 +112,7 @@ class IVF:
         -----------
         X : numpy.ndarray, shape (n_samples, n_features)
             The input data points to be indexed. Each row represents a data point with n_features dimensions.
-        n_probes : int, optional, default: 1
+        n_probes : int, optional, default: 2
             The number of nearest cluster centers to assign each data point to. Must be a positive integer.
         verbose : bool, optional, default: False
             If True, print additional information during the index building process.
@@ -124,6 +124,9 @@ class IVF:
         """
 
         self.data = data = X.copy()
+
+        if verbose:
+            print("Computing nearest clusters...")
 
         if self.metric == "euclidean":
             distances = cdist(data, self.all_centers)
@@ -142,7 +145,8 @@ class IVF:
         )
         self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
-        # Move data around to localize individual clusters
+        if verbose:
+            print("Move data around to localize individual clusters...")
         for i in range(self.active_centers.shape[0]):
             # TODO: QuckADC stores the resiuals (data[mask] - center) here.
             # Is that better? That would require seperate PQs for each cluster...

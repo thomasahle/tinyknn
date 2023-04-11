@@ -67,7 +67,7 @@ else:
     print("Computing true neighbours...")
     start = time.time()
     true_neighbours = brute(queries, data, k_neighbours, metric=args.metric)
-    print(f"Took {time.time() - start:.1} seconds.")
+    print(f"Took {time.time() - start:.1f} seconds.")
     np.save(true_neighbours_filename, true_neighbours)
 
 ivf_filename = f"ivf_{args.metric}_{num_points=}_{num_queries=}_{dims_per_block=}.pickle"
@@ -81,34 +81,37 @@ else:
     ivf = IVF(args.metric, num_clusters, pq)
     start = time.time()
     ivf.fit(data, verbose=True)
-    print(f"Took {time.time() - start:.1} seconds.")
+    print(f"Took {time.time() - start:.1f} seconds.")
     print("Saving index to", ivf_filename)
     with open(ivf_filename, "wb") as file:
         pickle.dump((pq, ivf), file)
 
-print("Now that we have the index, actually add the points to it...")
-start = time.time()
-ivf.build(data)
-print(f"Took {time.time() - start:.1} seconds.")
-
-print("Querying")
-query_function = getattr(ivf, args.query_method)
-recall = 0
-n_probes = 1
-while recall < .9:
+print("Now that we have the index, actually add the points to it.")
+n_max_build_probes = 10
+for build_probes in range(1, n_max_build_probes):
+    print(f"Adding each point to {build_probes} lists...")
     start = time.time()
-    found = 0
+    ivf.build(data, n_probes=build_probes, verbose=True)
+    print(f"Took {time.time() - start:.1f} seconds.")
 
-    with tqdm.tqdm(enumerate(zip(queries, true_neighbours)), total=num_queries, leave=False) as pbar:
-        pbar.set_description(f"Probing: {n_probes} out of {ivf.n_clusters} clusters")
-        for i, (query, true_neighbor) in pbar:
-            guess = query_function(query, k=k_neighbours, n_probes=n_probes)
-            found += len(set(true_neighbor) & set(guess))
+    print("Querying")
+    query_function = getattr(ivf, args.query_method)
+    recall = 0
+    n_probes = 1
+    while (build_probes == 1 and recall < .8) or (build_probes > 1 and recall < .9):
+        start = time.time()
+        found = 0
 
-    query_time = time.time() - start
-    recall = found / k_neighbours / num_queries
+        with tqdm.tqdm(enumerate(zip(queries, true_neighbours)), total=num_queries, leave=False) as pbar:
+            pbar.set_description(f"Probing: {n_probes} out of {ivf.n_clusters} clusters")
+            for i, (query, true_neighbor) in pbar:
+                guess = query_function(query, k=k_neighbours, n_probes=n_probes)
+                found += len(set(true_neighbor) & set(guess))
 
-    print(f"Recall{k_neighbours}@{k_neighbours}:", recall)
-    print("Queries/second:", num_queries / query_time)
-    n_probes += int(n_probes**.5)
+        query_time = time.time() - start
+        recall = found / k_neighbours / num_queries
+
+        print(f"Recall{k_neighbours}@{k_neighbours}:", recall)
+        print("Queries/second:", num_queries / query_time)
+        n_probes += int(n_probes**.5)
 
