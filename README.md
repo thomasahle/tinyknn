@@ -5,7 +5,7 @@ Uses Cython for SIMD acceleration of distance computations on quantized index.
 ![Queries / Recall](https://raw.githubusercontent.com/thomasahle/fast_pq/main/plot.png)
 
 <p align="center">
-(Performance tradeoff on <a href="http://ann-benchmarks.com/glove-100-angular_10_angular.html">ANN Benchmarks</a>.)
+(Performance tradeoff on <a href="http://ann-benchmarks.com/glove-100-angular_10_angular.html">ANN Benchmarks</a>. Up and to the right is better.)
 </p>
 
 # Examples
