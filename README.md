@@ -1,11 +1,67 @@
 # Fast PQ
-Simple SIMD based Product Quantization in Python
+Simple Python implementaiton of Product Quantization and Inverted File Indexing.
+Uses Cython for SIMD acceleration of distance computations on quantized index.
 
-# Example
+# Examples
+
+We will start by generating random data to be used in the examples.
+
+## Generating data
+
+We will generate random data with 10000 points and 128 dimensions. We will also generate 1000 query points.
+
+```python
+import numpy as np
+
+n = 10000
+d = 128
+
+X = np.random.rand(n, d)
+queries = np.random.rand(1000, d)
+```
+
+## Using Product Quantization
+
+We can use the `FastPQ` class to quantize the data and perform nearest neighbor search.
+
+```python
+from fast_pq import FastPQ
+
+pq = FastPQ(m=8, ksub=256)
+pq.fit(X)
+
+distances, neighbors = pq.query(queries, k=10)
+```
+
+This will return the 10 nearest neighbors for each query, as well as the distances to those neighbors.
+
+## Using Inverted File Indexing
+
+We can use the `IVF` class to perform approximate nearest neighbor search with Inverted File Indexing.
+
+```python
+from fast_pq import IVF
+
+ivf = IVF("euclidean", cl=100, pq=pq)
+ivf.fit(X)
+
+ivf.build(X)
+
+distances, neighbors = ivf.query(queries, k=10, n_probes=10)
+```
+
+This will perform approximate nearest neighbor search using Inverted File Indexing, with 10 probes for each query. Note that we first have to call the `fit` method to build the codebook, and then the `build` method to populate the inverted file.
+
+See also `examples/` for more detailed examples of usage.
+
+# Building
+
+You need to build `fast_pq` before you can run it, as it contains Cython code.
+
 ```
 $ pip install -r requirements.txt
 $ python setup.py build_ext --inplace
-$ python example.py
+$ python -m examples.example
 n=16000, d=128, queries=1000, dims_per_block=2
 Sampling
 Computing true neighbours
@@ -23,5 +79,3 @@ Scipy speed for comparison: 2.249645948410034
 In this example Fast PQ is about 16 times faster than optmized scipy/numpy.
 The reason is that Fast PQ uses a trick called [Accelerated Nearest Neighbor Search with Qick ADC](https://dl.acm.org/doi/abs/10.1145/3078971.3078992)
 with which SIMD instructions are used to perform 16 inner product operations in a single instruction.
-
-[![build](https://github.com/thomasahle/fast_pq/actions/workflows/testing.yml/badge.svg)](https://github.com/thomasahle/fast_pq/actions/workflows/testing.yml)
