@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.cluster
-from _transform import transform_data, transform_tables
-from _fast_pq import query_pq_sse, estimate_pq_sse
+from ._transform import transform_data, transform_tables
+from ._fast_pq import query_pq_sse, estimate_pq_sse
 
 
 def pad(arr, mults):

@@ -4,7 +4,10 @@ from fast_pq import bottom_k
 
 
 def cdist(X, Y, chunk=100):
-    """Returns R st. R[i,j] = dist(X_i, Y_j)^2"""
+    """
+    Computes the squared Euclidean distances between two sets of points X and Y.
+    Returns R st. R[i,j] = dist(X_i, Y_j)^2
+    """
     nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
     ny = np.einsum("ij,ij->i", Y, Y)
     res = np.zeros((nx.size, ny.size))
@@ -14,14 +17,26 @@ def cdist(X, Y, chunk=100):
     return res
 
 
-def brute(X, Y, k, chunk=100):
-    """Returns R st. R[i,j] = dist(X_i, Y_j)^2"""
+def brute(X, Y, k, metric="euclidean", chunk=100):
+    """
+    Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
+    between X and Y.
+    """
     nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
     ny = np.einsum("ij,ij->i", Y, Y)
     res = np.zeros((nx.size, k))
-    for i in range(0, nx.size, chunk):
-        part = np.add.outer(nx[i : i + chunk], ny) - 2 * X[i : i + chunk] @ Y.T
-        res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
+    if metric == "euclidean":
+        for i in range(0, nx.size, chunk):
+            part = np.add.outer(nx[i : i + chunk], ny) - 2 * X[i : i + chunk] @ Y.T
+            res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
+    elif metric == "angular":
+        Xn = X / nx[:, None]
+        Yn = Y / ny[:, None]
+        for i in range(0, nx.size, chunk):
+            part = - 2 * Xn[i : i + chunk] @ Yn.T
+            res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
+    else:
+        raise ValueError(f"Metric not supported: {metric}")
     return res
 
 

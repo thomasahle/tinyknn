@@ -3,10 +3,11 @@ from Cython.Build import cythonize
 
 setup(
     name="_fast_pq",
+    packages=["fast_pq"],
     ext_modules=cythonize(
         Extension(
-            "_fast_pq",
-            sources=["_fast_pq.pyx"],
+            "fast_pq._fast_pq",
+            sources=["fast_pq/_fast_pq.pyx"],
             extra_compile_args=[
                 "-O3",
                 "-march=native",
