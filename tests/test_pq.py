@@ -1,9 +1,8 @@
 import numpy as np
-import scipy as sp
 import pytest
 
 from fast_pq._fast_pq import estimate_pq_sse, query_pq_sse
-from fast_pq import FastPQ
+from fast_pq import FastPQ, cdist
 
 
 def test_recall():
@@ -18,7 +17,7 @@ def test_recall():
 def _test_recall_inner(n, d, k, dpb, method):
     X = np.random.randn(n, d).astype(np.float32)
     qs = np.random.randn(k, d).astype(np.float32)
-    trus = sp.spatial.distance.cdist(qs, X).argmin(axis=1)
+    trus = cdist(qs, X).argmin(axis=1)
 
     pq = FastPQ(dims_per_block=dpb)
     data = pq.fit_transform(X)

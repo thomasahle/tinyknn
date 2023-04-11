@@ -2,5 +2,4 @@ wheel
 Cython
 numpy
 scikit-learn
-scipy
 pytest

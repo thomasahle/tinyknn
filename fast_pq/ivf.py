@@ -6,7 +6,8 @@ from fast_pq import bottom_k
 def cdist(X, Y, chunk=100):
     """
     Computes the squared Euclidean distances between two sets of points X and Y.
-    Returns R st. R[i,j] = dist(X_i, Y_j)^2
+    Returns R st. R[i,j] = dist(X_i, Y_j)^2.
+    Equivalent to scipy.spatial.distance.cdist.
     """
     nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
     ny = np.einsum("ij,ij->i", Y, Y)
