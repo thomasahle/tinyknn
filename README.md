@@ -32,11 +32,16 @@ We can use the `FastPQ` class to quantize the data and perform nearest neighbor 
 
 ```python
 from fast_pq import FastPQ
+# Initialize PQ with 16 columns of 8 dimensions each
+pq = FastPQ(dims_per_block=8)
+X_compressed = pq.fit_transform(X)
 
-pq = FastPQ(m=8, ksub=256)
-pq.fit(X)
+# Compute exact k-nearest neighbors, accelerated by PQ
+for q in queries:
+    distance_table = pq.distance_table(q)
+    est8 = distance_table.estimate_distances(X_compressed)
+    print("Probably nearest neighbor:", est8.argmin())
 
-distances, neighbors = pq.query(queries, k=10)
 ```
 
 This will return the 10 nearest neighbors for each query, as well as the distances to those neighbors.
