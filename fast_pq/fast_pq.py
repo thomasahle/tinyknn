@@ -137,6 +137,10 @@ class _FastDistanceTable:
         return self.q @ self.q + (as_float / self.scale + self.mean)
 
     def top(self, transformed_data, data, k=1, rescore=None, out=None):
+        """
+        Find the nearest data points to the query, given the compressed
+        and non-compressed data to search.
+        """
         if k >= len(data):
             diff = data - self.q
             return np.arange(len(data)), (diff * diff).sum(axis=1)
@@ -152,7 +156,33 @@ class _FastDistanceTable:
         best = bottom_k(dists, k=k)
         return guess[best], dists[best]
 
+    def ctop(self, transformed_data, data, k=1, rescore=None):
+        """
+        Like top, but uses cython.
+        """
+        true_n, transformed_data = transformed_data
+        k = min(k, true_n)
+        if not rescore:
+            rescore = min(2 * k + 10, true_n)
+        assert true_n >= rescore >= k
+        indices = np.zeros((rescore,), dtype=np.int32)
+        values = np.zeros((rescore,), dtype=np.int32)
+        query_pq_sse(transformed_data, self.tables, indices, values, True)
+        good_indices = indices < true_n  # TODO: We remove paddinig in a kinda dumb way
+        indices = indices[good_indices]
+        if rescore > k:
+            diff = data[indices] - self.q[: data.shape[1]]  # Remove padding from q
+            dists = np.einsum("ij,ij->i", diff, diff)
+            best = bottom_k(dists, k=k)
+            return indices[best], dists[best]
+        values = values[good_indices]
+        return indices, values
+
     def ctops(self, transformed_datas, data, k=1, rescore=None):
+        """
+        Like ctop, but does takes multiple datasets at the same time, which might be
+        useful when doing multi-probing IVF.
+        """
         true_n, transformed_data = transformed_data
         k = min(k, true_n)
         if not rescore:
@@ -165,25 +195,6 @@ class _FastDistanceTable:
         for true_n, transformed_data in transformed_datas:
             query_pq_sse(transformed_data, self.tables, indices, values, True)
 
-        good_indices = indices < true_n  # TODO: We remove paddinig in a kinda dumb way
-        indices = indices[good_indices]
-        if rescore > k:
-            diff = data[indices] - self.q[: data.shape[1]]  # Remove padding from q
-            dists = np.einsum("ij,ij->i", diff, diff)
-            best = bottom_k(dists, k=k)
-            return indices[best], dists[best]
-        values = values[good_indices]
-        return indices, values
-
-    def ctop(self, transformed_data, data, k=1, rescore=None):
-        true_n, transformed_data = transformed_data
-        k = min(k, true_n)
-        if not rescore:
-            rescore = min(2 * k + 10, true_n)
-        assert true_n >= rescore >= k
-        indices = np.zeros((rescore,), dtype=np.int32)
-        values = np.zeros((rescore,), dtype=np.int32)
-        query_pq_sse(transformed_data, self.tables, indices, values, True)
         good_indices = indices < true_n  # TODO: We remove paddinig in a kinda dumb way
         indices = indices[good_indices]
         if rescore > k:
