@@ -90,3 +90,22 @@ Scipy speed for comparison: 2.249645948410034
 In this example Fast PQ is about 16 times faster than optmized scipy/numpy.
 The reason is that Fast PQ uses a trick called [Accelerated Nearest Neighbor Search with Qick ADC](https://dl.acm.org/doi/abs/10.1145/3078971.3078992)
 with which SIMD instructions are used to perform 16 inner product operations in a single instruction.
+
+# Benchmarking
+To benchmark on the GloVe dataset, first download and preprocess it using
+```
+examples/glove/prepare-dataset.sh
+```
+Then run
+```
+$ python3 -m examples.bench examples/glove/dataset/glove.twitter.27B.100d.npy --metric angular
+Loading and shuffling...
+num_points=1183514, num_dims=100, num_queries=10000, dims_per_block=2, num_clusters=1087
+...
+Querying
+Recall10@10: 0.37403000000000003
+Queries/second: 4727.144941521318
+Recall10@10: 0.5021399999999999
+Queries/second: 3965.6137940410995
+...
+```
