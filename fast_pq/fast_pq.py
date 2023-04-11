@@ -32,9 +32,6 @@ def pad(arr, mults):
     remains unchanged and is located at the beginning of each dimension in the output array.
     """
     new_shape = tuple(s + (-s) % m for s, m in zip(arr.shape, mults))
-    # TODO: It would be nice to pad using the code with largest possible distance
-    # in each dimension, so as to maximiize the likelihood of not seeing any of them
-    # in the top values.
     new_arr = np.zeros(new_shape, dtype=arr.dtype)
     new_arr[tuple(slice(0, s) for s in arr.shape)] = arr
     return new_arr
@@ -306,3 +303,4 @@ class DummyDistanceTable:
         dists = self.estimate_distances(transformed_data)
         best = bottom_k(dists, k)
         return best, dists[best]
+
