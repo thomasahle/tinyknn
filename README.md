@@ -32,8 +32,8 @@ We can use the `FastPQ` class to quantize the data and perform nearest neighbor 
 
 ```python
 from fast_pq import FastPQ
-# Initialize PQ with 16 columns of 8 dimensions each
-pq = FastPQ(dims_per_block=8)
+# Initialize PQ with 64 columns of 2 dimensions each
+pq = FastPQ(dims_per_block=2)
 X_compressed = pq.fit_transform(X)
 
 # Compute exact k-nearest neighbors, accelerated by PQ
@@ -45,6 +45,8 @@ for q in queries:
 ```
 
 This will return the 10 nearest neighbors for each query, as well as the distances to those neighbors.
+Note that we want a quite low `dims_per_block` compared to other Product Quantization methods, since we only use 4 bits per block.
+This again can be attributed to the SSE instructions only allowing 4 bit table lookups.
 
 ## Using Inverted File Indexing
 
