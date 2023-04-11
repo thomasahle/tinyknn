@@ -30,8 +30,8 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
             part = np.add.outer(nx[i : i + chunk], ny) - 2 * X[i : i + chunk] @ Y.T
             res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
     elif metric == "angular":
-        Xn = X / nx[:, None]
-        Yn = Y / ny[:, None]
+        Xn = X / np.sqrt(nx[:, None])
+        Yn = Y / np.sqrt(ny[:, None])
         for i in range(0, nx.size, chunk):
             part = - 2 * Xn[i : i + chunk] @ Yn.T
             res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
@@ -95,6 +95,7 @@ class IVF:
         if self.metric == "euclidean":
             labels = cdist(X, self.all_centers).argmin(axis=1)
         elif self.metric == "angular":
+            X /= np.linalg.norm(X, axis=1, keepdims=True)
             labels = np.argmax(X @ self.all_centers.T, axis=1)
 
         # We make sure that all centers have at least one point.

@@ -65,7 +65,9 @@ if os.path.isfile(true_neighbours_filename):
     print(f"Found {num_queries=}, {k_neighbours=}")
 else:
     print("Computing true neighbours...")
+    start = time.time()
     true_neighbours = brute(queries, data, k_neighbours, metric=args.metric)
+    print(f"Took {time.time() - start:.1} seconds.")
     np.save(true_neighbours_filename, true_neighbours)
 
 ivf_filename = f"ivf_{args.metric}_{num_points=}_{num_queries=}_{dims_per_block=}.pickle"
@@ -77,13 +79,17 @@ else:
     print("Building Index...")
     pq = FastPQ(dims_per_block=dims_per_block)
     ivf = IVF(args.metric, num_clusters, pq)
+    start = time.time()
     ivf.fit(data, verbose=True)
+    print(f"Took {time.time() - start:.1} seconds.")
     print("Saving index to", ivf_filename)
     with open(ivf_filename, "wb") as file:
         pickle.dump((pq, ivf), file)
 
 print("Now that we have the index, actually add the points to it...")
+start = time.time()
 ivf.build(data)
+print(f"Took {time.time() - start:.1} seconds.")
 
 print("Querying")
 query_function = getattr(ivf, args.query_method)
