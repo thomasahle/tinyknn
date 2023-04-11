@@ -10,18 +10,22 @@ from _transform import transform_data, transform_tables
 def test_pad():
     np.random.seed(12)
     for _ in range(10):
-        for d in range(1,4):
-            for m in range(1,4):
-                shape = [np.random.randint(1,10) for _ in range(d)]
+        for d in range(1, 4):
+            for m in range(1, 4):
+                shape = [np.random.randint(1, 10) for _ in range(d)]
                 ar = np.zeros(shape)
-                shape2 = pad(ar, [m]*d).shape
-                assert all(s1 <= s2 < s1+m and s2%m==0 for s1,s2 in zip(shape, shape2))
-                
+                shape2 = pad(ar, [m] * d).shape
+                assert all(
+                    s1 <= s2 < s1 + m and s2 % m == 0 for s1, s2 in zip(shape, shape2)
+                )
+
 
 def test_simple():
     dat = [[1, 3, 7, 15]] + [[0, 0, 0, 0]] * 15
     tab = [list(range(16)) for i in range(4)]
-    out = _slow_pq(np.array(dat, dtype=np.uint8), np.array(tab, dtype=np.uint8), signed=False)
+    out = _slow_pq(
+        np.array(dat, dtype=np.uint8), np.array(tab, dtype=np.uint8), signed=False
+    )
     assert out[0] == sum((1, 3, 7, 15))
     assert all(out[i] == 0 for i in range(1, 16))
 
@@ -44,20 +48,23 @@ def _test_rand_inner_unsigned(n, d):
 
 
 def sat8_add(x, y):
-    if x+y > 127: return 127
-    if x+y < -128: return -128
-    return x+y
+    if x + y > 127:
+        return 127
+    if x + y < -128:
+        return -128
+    return x + y
 
 
 def _test_rand_inner_signed(n, d):
     dat = [[random.randrange(16) for _ in range(d)] for _ in range(n)]
     # We saturate at 127, so no reason to have numbers much bigger than 1/sqrt(d) of that.
-    top = 127 // d**.5
+    top = 127 // d**0.5
     tab = [[random.randrange(-top, top) for _ in range(16)] for _ in range(d)]
     # For unsigned addition saturation is associative, but for signed we have
     # to keep track of the stauration at every step.
-    expected = np.array([reduce(sat8_add, (tab[j][dat[i][j]] for j in range(d)))
-                        for i in range(n)])
+    expected = np.array(
+        [reduce(sat8_add, (tab[j][dat[i][j]] for j in range(d))) for i in range(n)]
+    )
     out = _slow_pq(np.array(dat, dtype=np.uint8), np.array(tab, dtype=np.uint8), True)
     assert np.all(expected == out.astype(np.int8))
 

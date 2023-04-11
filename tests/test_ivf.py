@@ -30,18 +30,18 @@ def test_brute():
 
 def test_euclidian_recall():
     np.random.seed(10)
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "euclidean", 1) > 0.1
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "euclidean", 2) > 0.2
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "euclidean", 4) > 0.35
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "euclidean", 8) > 0.50
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "euclidean", 1) > 0.1
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "euclidean", 2) > 0.2
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "euclidean", 4) > 0.35
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "euclidean", 8) > 0.50
 
 
 def test_angular_recall():
     np.random.seed(10)
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "angular", 1) > 0.09
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "angular", 2) > 0.18
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "angular", 4) > 0.27
-    assert _test_recall_inner(10 ** 2, 20, 10, 2, 10, "angular", 8) > 0.36
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "angular", 1) > 0.09
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "angular", 2) > 0.18
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "angular", 4) > 0.27
+    assert _test_recall_inner(10**2, 20, 10, 2, 10, "angular", 8) > 0.36
 
 
 def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
@@ -52,7 +52,7 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
     pq = FastPQ(dims_per_block=dpb)
-    ivf = IVF(metric, int(n ** 0.5), pq)
+    ivf = IVF(metric, int(n**0.5), pq)
     ivf.fit(X).build(X)
     recall_at = 0
     for q, tru in zip(qs, trus):

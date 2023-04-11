@@ -15,7 +15,7 @@ def pad(arr, mults):
 
 
 def bottom_k(arr, k):
-    """ Returns the k smallest indices of arr """
+    """Returns the k smallest indices of arr"""
     if k >= len(arr):
         return np.arange(len(arr))
     return np.argpartition(arr, k)[:k]

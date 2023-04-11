@@ -1,6 +1,6 @@
 wheel
-Cython==0.29.21
-numpy==1.20.1
-scikit-learn==0.24.1
-scipy==1.6.0
-pytest==6.2.2
+Cython
+numpy
+scikit-learn
+scipy
+pytest

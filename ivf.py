@@ -4,7 +4,7 @@ from fast_pq import bottom_k
 
 
 def cdist(X, Y, chunk=100):
-    """ Returns R st. R[i,j] = dist(X_i, Y_j)^2 """
+    """Returns R st. R[i,j] = dist(X_i, Y_j)^2"""
     nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
     ny = np.einsum("ij,ij->i", Y, Y)
     res = np.zeros((nx.size, ny.size))
@@ -15,7 +15,7 @@ def cdist(X, Y, chunk=100):
 
 
 def brute(X, Y, k, chunk=100):
-    """ Returns R st. R[i,j] = dist(X_i, Y_j)^2 """
+    """Returns R st. R[i,j] = dist(X_i, Y_j)^2"""
     nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
     ny = np.einsum("ij,ij->i", Y, Y)
     res = np.zeros((nx.size, k))
