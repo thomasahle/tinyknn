@@ -9,11 +9,18 @@ def cdist(X, Y, chunk=100):
     Returns R st. R[i,j] = dist(X_i, Y_j)^2.
     Equivalent to scipy.spatial.distance.cdist.
     """
-    nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
+    # This is how sklearn computes row norms. It 
+    # %timeit np.linalg.norm(x, axis=1)
+    # 486 ms ± 6.33 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+    # %timeit np.einsum('ij,ij->i',x,x)
+    # 62.9 ms ± 2.35 ms per loop (mean ± std. dev. of 7 runs, 10 loops each)
+    # %timeit (x*x).sum(axis=1)
+    # 495 ms ± 6.71 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
+    nx = np.einsum("ij,ij->i", X, X)
     ny = np.einsum("ij,ij->i", Y, Y)
     res = np.zeros((nx.size, ny.size))
     for i in range(0, nx.size, chunk):
-        res[i : i + chunk] = np.add.outer(nx[i : i + chunk], ny)
+        res[i : i + chunk] = nx[i : i + chunk, None] + ny
         res[i : i + chunk] -= 2 * X[i : i + chunk] @ Y.T
     return res
 
@@ -23,12 +30,12 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
     Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
     between X and Y.
     """
-    nx = np.einsum("ij,ij->i", X, X)  # This is how sklearn computes rownorms
+    nx = np.einsum("ij,ij->i", X, X)
     ny = np.einsum("ij,ij->i", Y, Y)
     res = np.zeros((nx.size, k))
     if metric == "euclidean":
         for i in range(0, nx.size, chunk):
-            part = np.add.outer(nx[i : i + chunk], ny) - 2 * X[i : i + chunk] @ Y.T
+            part = nx[i : i + chunk, None] + ny - 2 * X[i : i + chunk] @ Y.T
             res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
     elif metric == "angular":
         Xn = X / np.sqrt(nx[:, None])
@@ -42,6 +49,10 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
 
 
 def brute1(x, Y, k):
+    """
+    Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
+    between X and Y.
+    """
     diff = Y - x
     dists = np.einsum("ij,ij->i", diff, diff)
     return dists.argpartition(kth=k)[:k]
@@ -58,10 +69,12 @@ class IVF:
         self.lists, self.ids = [None] * n_clusters, [None] * n_clusters
 
     def fit(self, X, verbose=False):
-        # Decides on IVF centers and fits product quantizer.
-        # Doesn't insert any points init the data structure.
-        # If you want faster training, just fit on a sample rather than all the data
-        # like this: ivf.fit(X[np.random.choice(X.shape[0], 10**4, replace=False)]
+        """
+        Decides on IVF centers and fits product quantizer.
+        Doesn't insert any points init the data structure.
+        If you want faster training, just fit on a sample rather than all the data
+        like this: ivf.fit(X[np.random.choice(X.shape[0], 10**4, replace=False)]
+        """
 
         n, d = X.shape
         X = np.ascontiguousarray(X, dtype=np.float32)
@@ -91,49 +104,93 @@ class IVF:
 
         return self
 
-    def build(self, X, verbose=False):
+    def build(self, X, n_probes=1, verbose=False):
+        """
+        Builds the data structure by associating each data point in X with its nearest n_probes cluster centers.
+
+        Parameters:
+        -----------
+        X : numpy.ndarray, shape (n_samples, n_features)
+            The input data points to be indexed. Each row represents a data point with n_features dimensions.
+        n_probes : int, optional, default: 1
+            The number of nearest cluster centers to assign each data point to. Must be a positive integer.
+        verbose : bool, optional, default: False
+            If True, print additional information during the index building process.
+
+        Returns:
+        --------
+        self : object
+            Returns the instance itself, with the index structure built and data points assigned to the nearest n_probes cluster centers.
+        """
+
+        self.data = data = X.copy()
 
         if self.metric == "euclidean":
-            labels = cdist(X, self.all_centers).argmin(axis=1)
+            distances = cdist(data, self.all_centers)
         elif self.metric == "angular":
-            X /= np.linalg.norm(X, axis=1, keepdims=True)
-            labels = np.argmax(X @ self.all_centers.T, axis=1)
+            data /= np.linalg.norm(data, axis=1, keepdims=True)
+            distances = - data @ self.all_centers.T
+
+        nearest_indices = np.argpartition(distances, n_probes, axis=1)[:, :n_probes]
 
         # We make sure that all centers have at least one point.
         # This shouldn't be a problem unless `n` is nearly as small as
         # `n_clusters`.
-        used_labels = np.unique(labels)
+
         self.active_centers = np.ascontiguousarray(
-            self.all_centers[used_labels], dtype=np.float32
+            self.all_centers[np.unique(nearest_indices.flatten())], dtype=np.float32
         )
         self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
         # Move data around to localize individual clusters
-        for i in range(used_labels.size):
-            mask = labels == i
-            # TODO: QuckADC stores the resiuals (X[mask] - center) here.
+        for i in range(self.active_centers.shape[0]):
+            # TODO: QuckADC stores the resiuals (data[mask] - center) here.
             # Is that better? That would require seperate PQs for each cluster...
             # That is, even if we used the same centers we would still have to
             # compute a seperate distance table for each partition we visit.
-            self.lists[i] = np.ascontiguousarray(X[mask])
+            mask = np.any(nearest_indices == i, axis=1)
+            self.lists[i] = np.ascontiguousarray(data[mask])
             self.pq_transformed_points[i] = self.pq.transform(self.lists[i])
-            self.ids[i] = np.arange(X.shape[0])[mask]
-
-        self.data = X
+            self.ids[i] = np.arange(data.shape[0])[mask]
 
         return self
 
+    # Ide til ny query:
+    # First find centers, using plenty of rescoring. Maybe even just precise.
+    # Then run query_sse on each cluster with a sufficiently large k.
+    # Let t be the size of the largest cluster.
+    # After each query_sse replace indices < t with idmap[ids]+t.
+    # Don't change the value list.
+    # Once done, subtract t from id list to get a list of the real ids.
+    # This is then used for rescoring.
+
     def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+        """
+        Queries the data structure to find the top k closest elements to the given query vector q.
+
+        Parameters
+        ----------
+        q : array-like
+            The query vector for which to find the top k closest elements.
+        k : int
+            The number of closest elements to return.
+        n_probes : int, optional, default=1
+            The number of probes to use for searching the closest elements.
+        rescore_centers : array-like, optional, default=None
+            The transformed center data used for rescoring. If None, the original centers are used.
+        rescore_lists : array-like, optional, default=None
+            The transformed list data used for rescoring. If None, the original lists are used.
+
+        Returns
+        -------
+        numpy.ndarray
+            An array of indices corresponding to the top k closest elements to the query vector q.
+        """
+
         q = np.ascontiguousarray(q, dtype=np.float32)
         if self.metric == "angular":
             q /= np.linalg.norm(q)
         dtable = self.pq.distance_table(q)
-
-        # Shortcut for single-probe
-        # if n_probes == 1:
-        #    i = dtable.top(self.pq_transformed_centers, self.centers)[0][0]
-        #    js, _ = dtable.top(self.pq_transformed_points[i], self.lists[i], k=k)
-        #    return self.ids[i][js]
 
         # Find best centers
         top, _ = dtable.ctop(
@@ -144,69 +201,21 @@ class IVF:
         js, dists = [], []
         for i in top:
             sub_n, _ = self.lists[i].shape
-            sub_js, sub_dists = dtable.ctop(
-                self.pq_transformed_points[i], self.lists[i], k=k
-            )
+            sub_js, sub_dists = dtable.ctop(self.pq_transformed_points[i], self.lists[i], k=k)
             # Translate into global indexing
             js.append(self.ids[i][sub_js])
             dists.append(sub_dists)
 
         # Merge datas
         if not js:
-            return js  # Concatenate doesn't work on empty lists
+            # Concatenate doesn't work on empty lists
+            return js
         js, dists = np.concatenate(js), np.concatenate(dists)
+        # Remove duplicates (only an issue if build_probes > 1)
+        js, unique_idx = np.unique(js, return_index=True)
+        dists = dists[unique_idx]
         if k >= len(js):
             return js
         best = np.argpartition(dists, kth=k)[:k]
         return js[best]
 
-    # Ide til ny query:
-    # First find centers, using plenty of rescoring. Maybe even just precise.
-    # Then run query_sse on each cluster with a sufficiently large k.
-    # Let t be the size of the largest cluster.
-    # After each query_sse replace indices < t with idmap[ids]+t.
-    # Don't change the value list.
-    # Once done, subtract t from id list to get a list of the real ids.
-    # This is then used for rescoring.
-    #
-    # If I start having a performance problem due to the update time of the
-    # insertion sort, maybe I should start using a real priority queue.
-    # I guess I can implement that quickly enough.
-
-    def query3(self, q, k, n_probes=1):
-        dtable = pq.distance_table(q)
-
-    def query2(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
-        q = np.ascontiguousarray(q, dtype=np.float32)
-        if self.metric == "angular":
-            q /= np.linalg.norm(q)
-        dtable = self.pq.distance_table(q)
-
-        # Find best centers
-        # top = brute1(q, self.active_centers, n_probes)
-        # top = bottom_k(dtable.estimate_distances(self.pq_transformed_centers), n_probes)
-        c_dists = dtable.estimate_distances(self.pq_transformed_centers)
-        top = bottom_k(c_dists, 2 * n_probes + 10)
-        # print(c_dists[top])
-        top = top[brute1(q, self.active_centers[top], k=n_probes)]
-
-        # TODO: Preallocate space for js and dists rather than dynamically like this.
-        # (Even better: Keep that space allocated between queries)
-        js, dists = [], []
-        for i in top:
-            sub_dists = dtable.estimate_distances(self.pq_transformed_points[i])
-            js.append(self.ids[i])
-            dists.append(sub_dists)
-        js, dists = np.concatenate(js), np.concatenate(dists)
-
-        # Merge datas
-        if k >= len(js):
-            return js
-        rescore = min(2 * k + 10, len(js))
-        best_ids_1 = bottom_k(dists, rescore)
-        # print(dists[best_ids_1])
-        # print()
-        diffs = self.data[js[best_ids_1]] - q
-        real_dists = (diffs * diffs).sum(axis=1)
-        best = bottom_k(real_dists, k)
-        return js[best_ids_1[best]]

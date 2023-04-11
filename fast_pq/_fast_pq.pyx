@@ -112,8 +112,23 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
 
 cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices,
                         int[::1] vals, bool signd) nogil:
-    ''' Given a N x D dataset quantized into byte sizes chunks,
-        looks up each value in a table out outputs into `out`. '''
+    '''
+    Given a N x D dataset quantized into byte-sized chunks,
+    looks up each value in a table and outputs into `out`.
+
+    Parameters
+    ----------
+    data : 2D memoryview of uint64_t
+        The quantized dataset.
+    tables : 1D memoryview of uint64_t
+        The lookup tables.
+    indices : 1D memoryview of int
+        The output indices.
+    vals : 1D memoryview of int
+        The output values.
+    signd : bool
+        Determines if the distance is signed or unsigned.
+    '''
     cdef:
         int i, j
         __m128i block_dists, top_bound, cmp_mask
