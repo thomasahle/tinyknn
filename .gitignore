@@ -6,6 +6,7 @@ __pycache__/
 # Cache files
 *.npy
 examples/glove/dataset
+*.txt
 
 # C extensions
 *.so
