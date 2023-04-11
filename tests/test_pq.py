@@ -2,7 +2,7 @@ import numpy as np
 import scipy as sp
 import pytest
 
-from _fast_pq import estimate_pq_sse, query_pq_sse
+from fast_pq._fast_pq import estimate_pq_sse, query_pq_sse
 from fast_pq import FastPQ
 
 

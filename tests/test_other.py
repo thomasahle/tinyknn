@@ -1,5 +1,5 @@
 import numpy as np
-from _fast_pq import insert as heap_insert
+from fast_pq._fast_pq import insert as heap_insert
 
 
 def test_heap():

@@ -3,8 +3,8 @@ import numpy as np
 from functools import reduce
 
 from fast_pq import pad
-from _fast_pq import estimate_pq_sse
-from _transform import transform_data, transform_tables
+from fast_pq._fast_pq import estimate_pq_sse
+from fast_pq._transform import transform_data, transform_tables
 
 
 def test_pad():

@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from fast_pq import FastPQ, DummyPQ
-from ivf import IVF, cdist, brute
+from fast_pq import IVF, cdist, brute
 
 
 def test_cdist():
