@@ -2,6 +2,8 @@
 Simple Python implementaiton of Product Quantization and Inverted File Indexing.
 Uses Cython for SIMD acceleration of distance computations on quantized index.
 
+![Queries / Recall](https://raw.githubusercontent.com/thomasahle/fast_pq/main/plot.png)
+
 # Examples
 
 We will start by generating random data to be used in the examples.
