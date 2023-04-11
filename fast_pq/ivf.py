@@ -148,25 +148,12 @@ class IVF:
         if verbose:
             print("Move data around to localize individual clusters...")
         for i in range(self.active_centers.shape[0]):
-            # TODO: QuckADC stores the resiuals (data[mask] - center) here.
-            # Is that better? That would require seperate PQs for each cluster...
-            # That is, even if we used the same centers we would still have to
-            # compute a seperate distance table for each partition we visit.
             mask = np.any(nearest_indices == i, axis=1)
             self.lists[i] = np.ascontiguousarray(data[mask])
             self.pq_transformed_points[i] = self.pq.transform(self.lists[i])
             self.ids[i] = np.arange(data.shape[0])[mask]
 
         return self
-
-    # Ide til ny query:
-    # First find centers, using plenty of rescoring. Maybe even just precise.
-    # Then run query_sse on each cluster with a sufficiently large k.
-    # Let t be the size of the largest cluster.
-    # After each query_sse replace indices < t with idmap[ids]+t.
-    # Don't change the value list.
-    # Once done, subtract t from id list to get a list of the real ids.
-    # This is then used for rescoring.
 
     def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
         """
