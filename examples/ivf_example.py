@@ -46,15 +46,15 @@ else:
 print(trus.shape)
 
 print("Building Index")
-pq = FastPQ(dims_per_block=dpb)
-# pq = DummyPQ()
-ivf = IVF("euclidean", cl, pq)
 # We're fitting on a smaller sample for faster testing
 sub_size = 10**5
 if X.shape[0] > sub_size:
     subset = X[np.random.choice(X.shape[0], sub_size, replace=False)]
 else:
     subset = X
+pq = FastPQ(dims_per_block=dpb).fit(subset)
+# pq = DummyPQ()
+ivf = IVF("euclidean", cl, pq)
 ivf.fit(subset)
 ivf.build(X)
 

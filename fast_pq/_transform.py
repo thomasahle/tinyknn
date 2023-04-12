@@ -70,10 +70,10 @@ def transform_data(data0):
     data = data0.reshape(n // 16, 16, d)
     data = data.transpose(0, 2, 1)
     # Interleave rows two by two
-    data = (
-        data.reshape(n // 16, d // 2, 2, 16)
-        .reshape(n // 16, d // 2, 32, order="F")
-        .reshape(n // 16, d, 16)
+    data = (                                     # [0,1,2,3,4,5,6,7]
+        data.reshape(n // 16, d // 2, 2, 16)     # [0,1,2,3], [4,5,6,7]
+        .reshape(n // 16, d // 2, 32, order="F") # [0,4,1,5,2,6,3,7]
+        .reshape(n // 16, d, 16)                 # [0,4,1,5], [2,6,3,7]
     )
     # Reversing last dimension for endianess
     data = data[:, :, ::-1]
@@ -90,7 +90,7 @@ def transform_data(data0):
     assert data.shape == (n // 16, d, 16)
     # Converting last dimension to a single 64 bit number
     # data = np.frompyfunc(lambda x, y: (x << 4 | y), 2, 1).reduce(data, axis=2)
-    shifts = np.arange(15, -1, -1) * 4
+    shifts = np.arange(15, -1, -1, dtype=np.uint64) * 4
     data = (data << shifts).sum(axis=2, dtype=np.uint64)
     data = np.ascontiguousarray(data, dtype=np.uint64)
     assert data.shape == (n // 16, d)
@@ -108,3 +108,35 @@ def transform_tables(tables0):
     tables = tables.view(np.uint64)[:, 0]
     assert tables.shape == (2 * d,)
     return tables
+
+
+def unpack(transformed_data):
+    """
+    Unpack the transformed data back to its original format.
+
+    Parameters
+    ----------
+    transformed_data : numpy.ndarray
+        A 2D input array with dtype `np.uint64`. It is the output of the transform_data function.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        A 2D array of the original format. Its shape should be (n, d), where
+        d is the number of columns in the original data.
+    """
+    chunks, d = transformed_data.shape
+    n = chunks * 16
+
+    shifts = np.arange(15, -1, -1, dtype=np.uint64) * 4
+    data = (transformed_data[..., np.newaxis] >> shifts) & 0xF
+
+    data = data[:, :, ::-1]                               # [0,4,1,5], [2,6,3,7]
+    data = data.reshape(chunks, d // 2, 32)               # [0,4,1,5,2,6,3,7]
+    data = data.reshape(chunks, d // 2, 2, 16, order='F') # [0,1,2,3], [4,5,6,7]
+    data = data.reshape(chunks, d, 16)                    # [0,1,2,3], [4,5,6,7]
+
+    data = data.transpose(0, 2, 1)
+    data = data.reshape(n, d)
+
+    return data

@@ -28,6 +28,29 @@ def test_brute():
     assert np.all(np.sort(expected) == np.sort(best))
 
 
+def test_small_n():
+    d = 10
+    for metric in ["euclidean", "angular"]:
+        for n in range(1, 5):
+            X = np.random.randn(n, d).astype(np.float32)
+            q = np.random.randn(d).astype(np.float32)
+            ivf = IVF(metric, 1, FastPQ(2).fit(X))
+            ivf.fit(X).build(X,n_probes=1)
+            assert all(0 <= i < n for i in ivf.query(q, n))
+
+
+def test_far_small_n():
+    d = 10
+    for metric in ["euclidean", "angular"]:
+        for n in range(2, 5):
+            X = np.random.randn(n, d).astype(np.float32)
+            X[0, :] = 10**5
+            q = np.random.randn(d).astype(np.float32)
+            ivf = IVF(metric, 1, pq=FastPQ(2).fit(X))
+            ivf.fit(X).build(X, n_probes=1)
+            assert all(0 <= i < n for i in ivf.query(q, n))
+
+
 def test_euclidian_recall():
     np.random.seed(10)
     assert _test_recall_inner(10**2, 20, 10, 2, 10, "euclidean", 1) > 0.1
@@ -51,8 +74,7 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
         trus = cdist(qs, X).argpartition(axis=1, kth=at)[:, :at]
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
-    pq = FastPQ(dims_per_block=dpb)
-    ivf = IVF(metric, int(n**0.5), pq)
+    ivf = IVF(metric, int(n**0.5), FastPQ(2).fit(X))
     ivf.fit(X).build(X)
     recall_at = 0
     for q, tru in zip(qs, trus):

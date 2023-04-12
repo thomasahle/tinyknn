@@ -8,7 +8,7 @@ from fast_pq import FastPQ, cdist
 def test_recall():
     np.random.seed(10)
     for i in range(1, 5):
-        for method in ["argpartition", "top", "ctop"]:
+        for method in ["argpartition", "top"]:
             n = np.random.randint(16 * i, 16 * (i + 1))
             recall_at_10 = _test_recall_inner(n, 8 * i, 100, 2, method)
             assert recall_at_10 > 0.8
@@ -28,8 +28,6 @@ def _test_recall_inner(n, d, k, dpb, method):
             top10 = dtable.estimate_distances(data).argpartition(10)[:10]
         elif method == "top":
             top10, _ = dtable.top(data, X, 10)
-        elif method == "ctop":
-            top10, _ = dtable.ctop(data, X, 10)
         if tru in top10:
             recall_at_10 += 1
     return recall_at_10 / k
@@ -52,37 +50,36 @@ def test_topk_0():
             _test_topk_inner(0, 3, 11, 2, signed)
 
 
+def test_fit_transform():
+    np.random.seed(11)
+    n, d = 100, 10
+    X = np.random.randn(n, d).astype(np.float32)
+
+    pq = FastPQ(2)
+    n0, tdata0 = pq.fit_transform(X)
+    n1, tdata1 = pq.transform(X)
+    assert n0 == n1
+    np.testing.assert_array_equal(tdata0, tdata1)
+
+
 def _test_topk_inner(n, m, d, dpb, signed):
     X = np.random.randn(n, d).astype(np.float32)
-    print(f"{X=}")
     qs = np.random.randn(m, d).astype(np.float32)
-    print(f"{qs=}")
     pq = FastPQ(dims_per_block=dpb)
     _, data = pq.fit_transform(X)
-    print(f"{data=}")
 
     for q in qs:
         dtable = pq.distance_table(q)
-        print(f"{dtable=}")
 
         out = np.zeros(2 * len(data), dtype=np.uint64)
         estimate_pq_sse(data, dtable.tables, out, signed)
         est = out.view(np.int8 if signed else np.uint8)
         est = est[:n] # Remove padding
-        print(f"{est=}")
 
         k = n
         indices = np.zeros((k,), dtype=np.int32)
         values = np.zeros((k,), dtype=np.int32)
         query_pq_sse(data, n, dtable.tables, indices, values, signed)
-
-        print("esti", est.argsort(kind="stable"))
-        print("topi", indices)
-        print("estv", sorted(est))
-        print("topv", sorted(values))
-        print(indices)
-        print(values)
-        print()
 
         # Remove padding, and ignore
         # mask = indices < n |

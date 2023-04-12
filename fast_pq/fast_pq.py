@@ -1,5 +1,6 @@
 import numpy as np
 import sklearn.cluster
+from collections import namedtuple
 
 import warnings
 from sklearn.exceptions import ConvergenceWarning
@@ -9,6 +10,7 @@ from ._fast_pq import query_pq_sse, estimate_pq_sse
 
 warnings.simplefilter("error", category=ConvergenceWarning)
 
+TransformedData = namedtuple("TransformedData", "size packed")
 
 def pad1(arr, m):
     (s,) = arr.shape
@@ -30,6 +32,12 @@ def bottom_k(arr, k):
     if k >= len(arr):
         return np.arange(len(arr))
     return np.argpartition(arr, k)[:k]
+
+
+def bottom_k_2d(arr, k):
+    if k >= arr.shape[1]:
+        return np.resize(np.arange(arr.shape[1]), arr.shape)
+    return np.argpartition(arr, k, axis=1)[:, :k]
 
 
 class FastPQ:
@@ -62,7 +70,12 @@ class FastPQ:
         self : FastPQ
             The fitted FastPQ model.
         """
+        _transformed_data = self.fit_transform(data, verbose)
+        return self
+
+    def fit_transform(self, data, verbose=False):
         assert data.size > 0, "Can't fit no data"
+        true_n = data.shape[0]
         # SSE assumes the number of rows is divisible by 16.
         # It also needs the number of columns to be even, so we pad to a multiple
         # of 2 * self.dims_per_block.
@@ -74,6 +87,7 @@ class FastPQ:
         # We always use 16 clusters in FastPQ, since we want to use 4 bit SSE operations.
         cl = sklearn.cluster.KMeans(16, n_init=2)
         centers = []
+        transformed = []
         for i in range(d // self.dims_per_block):
             if verbose:
                 print(f"Fitting block {i}")
@@ -85,9 +99,13 @@ class FastPQ:
             # but durnig queries we need seperate distance tables per block anyway, so
             # it doesn't cost us much.
             centers.append(cl.cluster_centers_.copy())
+            # Might as well grab the labels (transformed column) while we have it.
+            transformed.append(cl.labels_[:, None])
         self.centers = np.array(centers, dtype=np.float32)
         self.center_norms_sq = np.linalg.norm(centers, axis=2) ** 2
-        return self
+
+        labels = np.hstack(transformed).astype(np.uint8)
+        return TransformedData(true_n, transform_data(labels))
 
     def transform(self, data):
         """
@@ -115,10 +133,7 @@ class FastPQ:
         labels = np.argmin(self.center_norms_sq - 2 * ips, axis=2)
         assert labels.shape == (n, d // self.dims_per_block)
         labels = np.array(labels, dtype=np.uint8)
-        return true_n, transform_data(labels)
-
-    def fit_transform(self, data):
-        return self.fit(data).transform(data)
+        return TransformedData(true_n, transform_data(labels))
 
     def distance_table(self, q):
         """
@@ -216,33 +231,13 @@ class _FastDistanceTable:
         as_float = np.ascontiguousarray(res, dtype=np.float32)
         return self.q @ self.q + (as_float / self.scale + self.mean)
 
-    def top(self, transformed_data, data, k=1, rescore=None, out=None):
+    def top(self, transformed_data, data, k=1, rescore=None):
         """
         Find the nearest data points to the query, given the compressed
         and non-compressed data to search.
         """
-        if k >= len(data):
-            diff = data - self.q
-            return np.arange(len(data)), (diff * diff).sum(axis=1)
-        if not rescore:
-            rescore = min(2 * k + 10, len(data))
-        assert rescore >= k
-
-        estimates = self.estimate_distances(transformed_data, out=out, rescale=False)
-        guess = bottom_k(estimates, k=rescore)
-
-        diff = data[guess] - self.q
-        dists = (diff * diff).sum(axis=1)
-        best = bottom_k(dists, k=k)
-        return guess[best], dists[best]
-
-    def ctop(self, transformed_data, data, k=1, rescore=None):
-        """
-        Like top, but uses the query_pq_sse Cython method to directly retrieve the
-        bottom-k indices from the transformed_data, rather than estimating all distances
-        and computing the bottom_k in numpy. Should generally be faster than than top(...)
-        """
         true_n, transformed_data = transformed_data
+        assert len(data) == true_n
         k = min(k, true_n)
         # In the first pass we collect `rescore` many rows
         if not rescore:

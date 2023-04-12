@@ -2,7 +2,7 @@ from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 setup(
-    name="_fast_pq",
+    name="fast_pq",
     packages=["fast_pq"],
     ext_modules=cythonize(
         Extension(

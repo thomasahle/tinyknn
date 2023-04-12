@@ -146,17 +146,8 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
         int cmp_bits, cmp_low, cmp_high, pos, tz, bits
         uint64_t dists
 
-    # Initialize heap. K = indices.shape[0] is the number of top values we want.
-    if signd:
-        for i in range(indices.shape[0]):
-            indices[i] = -1
-            vals[i] = 0x7f
-        top_bound = _mm_set1_epi8(0x7f)
-    else:
-        for i in range(indices.shape[0]):
-            indices[i] = -1
-            vals[i] = 0xff
-        top_bound = _mm_set1_epi8(0xff)
+    init_heap(indices, vals, signd)
+    top_bound = _mm_set1_epi8(vals[0])
 
     # Iterate through the data chunks
     for i in range(data.shape[0]):
@@ -194,6 +185,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
                         pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
 
                         # If we are down to the padding elements, we can just stop
+                        # FIXME: Why can't we just change this to "if pos >= n: return"?
                         if pos < n:
                             # Insert the new value into the heap
                             if signd:
@@ -201,11 +193,10 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
                             else:
                                 insert(indices, vals, pos, dists & 0xff)
 
-                        pos, bits, dists = pos+1, bits >> 1, dists >> 8
+                            pos, bits, dists = pos+1, bits >> 1, dists >> 8
 
             # Update bound vector to equal 16 times the largest distance in the array
-            # top_bound = _mm_set1_epi8(vals[-1]) # With insertion sort, the max is at the end
-            top_bound = _mm_set1_epi8(vals[0]) # If we use the heap, the max is at the start
+            top_bound = _mm_set1_epi8(vals[0])
 
 
 cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
@@ -243,43 +234,19 @@ cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
     return block_dists
 
 
-cdef void insert_old(int[::1] indices, int[::1] vals, int i, int v) nogil:
-    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
-    for j in range(indices.shape[0]):
-        # Insert the new value at the found location, then continue "recursively"
-        #if vals[j] > v or indices[j] == -1:
-        if vals[j] > v:
-            vals[j], v = v, vals[j]
-            indices[j], i = i, indices[j]
+cpdef void init_heap(int[::1] indices, int[::1] vals, bool signd) nogil:
+    cdef:
+        int K = indices.shape[0]
+    if signd:
+        for i in range(K):
+            indices[i] = -1
+            vals[i] = 0x7f
+    else:
+        for i in range(K):
+            indices[i] = -1
+            vals[i] = 0xff
 
 
-cdef void insert_old2(int[::1] indices, int[::1] vals, int i, int v) nogil:
-    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
-    # We know we are going to be somewhere in the array, so we just
-    # set ourselves at the right end, then swap until we are in the
-    # right position.
-    cdef int j = indices.shape[0]-1
-    indices[j], vals[j] = i, v
-    while j != 0 and vals[j-1] > vals[j]:
-        vals[j-1], vals[j] = vals[j], vals[j-1]
-        indices[j-1], indices[j] = indices[j], indices[j-1]
-        j -= 1
-
-
-cdef void insert_insort(int[::1] indices, int[::1] vals, int i, int v) nogil:
-    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
-    # It seems silly to do all that swappnig. Rather just move things
-    # down and then eventually insert ourselves.
-    # This is still using that we know we belong at least at the end,
-    # since we always insert ourselves somewhere eventually.
-    cdef int j = indices.shape[0]-1
-    while j != 0 and vals[j-1] > v:
-        indices[j], vals[j] = indices[j-1], vals[j-1]
-        j -= 1
-    indices[j], vals[j] = i, v
-
-
-# We use cpdef so we can unittest
 cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
@@ -289,39 +256,22 @@ cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
         int n = indices.shape[0]
         int j = 0
         int nxt, l, r
-    while True:
-        l, r = 2*j+1, 2*j+2
-        if l < n and vals[l] > v:
-            # Swap with the largest of the two children
-            if r < n and vals[r] > vals[l]:
-                nxt = r
-            else: nxt = l
-        elif r < n and vals[r] > v:
-            nxt = r
-        else:
-            break
-        indices[j], vals[j] = indices[nxt], vals[nxt]
-        j = nxt
-    indices[j], vals[j] = i, v
-
-
-cpdef void insert_heap_2(int[::1] indices, int[::1] vals, int i, int v) nogil:
-    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
-    # We need to easily be able to identify the largest element in the heap,
-    # since that's the one we are kicking out. Thus this is a max-heap with
-    # the largest value at 0.
-    cdef:
-        int n = indices.shape[0]
-        int j = 0
-        int nxt, l, r
+    # Insert the new value at the top, replacing the old furthest point.
+    # We assume it's given that our value is at most as large as that old point.
     indices[0], vals[0] = i, v
+    # Swap with the children until we are at least as large as both of them,
+    # or we reach the end of the array.
     while True:
         nxt = j
         l, r = 2*j+1, 2*j+2
+        # Find a larger child, assuming we don't go out of bounds.
         if l < n and vals[l] > vals[nxt]: nxt = l
         if r < n and vals[r] > vals[nxt]: nxt = r
+        # If there were no larger children, we are done.
         if nxt == j:
             break
+        # Swap the values.
         vals[nxt], vals[j] = vals[j], vals[nxt]
         indices[nxt], indices[j] = indices[j], indices[nxt]
         j = nxt
+

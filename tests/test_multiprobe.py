@@ -17,8 +17,7 @@ def compute_recall(metric, build_probes, query_probes):
         trus = cdist(qs, X).argpartition(axis=1, kth=at)[:, :at]
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
-    pq = FastPQ(dims_per_block=dpb)
-    ivf = IVF(metric, int(n**0.5), pq)
+    ivf = IVF(metric, int(n**0.5), FastPQ(2).fit(X))
     ivf.fit(X).build(X, n_probes=build_probes)
     recall_at = 0
     for q, tru in zip(qs, trus):

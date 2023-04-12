@@ -7,6 +7,7 @@ import os.path
 import sys
 import pickle
 import tqdm
+import sklearn.metrics
 
 from fast_pq import FastPQ, DummyPQ
 from fast_pq import IVF, cdist, brute
@@ -76,7 +77,7 @@ if os.path.isfile(ivf_filename):
         pq, ivf = pickle.load(file)
 else:
     print("Building Index...")
-    pq = FastPQ(dims_per_block=dims_per_block)
+    pq = FastPQ(dims_per_block=dims_per_block).fit(data)
     ivf = IVF(args.metric, num_clusters, pq)
     start = time.time()
     ivf.fit(data, verbose=True)
@@ -97,6 +98,7 @@ for build_probes in range(1, n_max_build_probes):
     query_function = getattr(ivf, args.query_method)
     recall = 0
     n_probes = 1
+    qpss, recalls = [], []
     while (build_probes == 1 and recall < .8) or (build_probes > 1 and recall < .9):
         start = time.time()
         found = 0
@@ -107,10 +109,22 @@ for build_probes in range(1, n_max_build_probes):
                 guess = query_function(query, k=k_neighbours, n_probes=n_probes)
                 found += len(set(true_neighbor) & set(guess))
 
-        query_time = time.time() - start
+        qps = num_queries / (time.time() - start)
         recall = found / k_neighbours / num_queries
+        qpss.append(qps)
+        recalls.append(recall)
 
         print(f"Recall{k_neighbours}@{k_neighbours}:", recall)
-        print("Queries/second:", num_queries / query_time)
+        print("Queries/second:", qps)
+
         n_probes += int(n_probes**.5)
+
+    # We compute the area under the curve, but only for recall in [1/2, 1]
+    qpss.append(0)
+    recalls.append(1)
+    recall0 = 1/2
+    qps0 = np.interp(recall0, recalls, qpss)
+    i = np.searchsorted(recalls, recall0)
+    auc = sklearn.metrics.auc([recall0] + recalls[i:], [qps0] + qpss[i:])
+    print(f"Area under the curve from {recall0} to 1: {auc:.1f}")
 

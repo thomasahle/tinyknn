@@ -1,7 +1,19 @@
 import numpy as np
 import sklearn.cluster
-from fast_pq import bottom_k
+from fast_pq import bottom_k, bottom_k_2d
 from ._fast_pq import query_pq_sse
+import time
+from contextlib import contextmanager
+
+
+@contextmanager
+def timer(verbose, text):
+    if verbose:
+        print(text)
+        start = time.time()
+    yield
+    if verbose:
+        print(f"Took {time.time() - start:.1f}s")
 
 
 def cdist(X, Y, chunk=100):
@@ -64,6 +76,7 @@ class IVF:
         assert metric in ["euclidean", "angular"]
         self.metric = metric
         self.pq = pq
+        assert pq.centers is not None, "PQ should be pre-fitted"
         self.pq_transformed_points = [None] * n_clusters
         self.pq_transformed_centers = [None] * n_clusters
         self.n_clusters = n_clusters
@@ -71,37 +84,32 @@ class IVF:
 
     def fit(self, X, verbose=False):
         """
-        Decides on IVF centers and fits product quantizer.
-        Doesn't insert any points init the data structure.
+        Decides on IVF centers using full X, not PQ transformed.
+        Doesn't insert any points into the data structure.
         If you want faster training, just fit on a sample rather than all the data
         like this: ivf.fit(X[np.random.choice(X.shape[0], 10**4, replace=False)]
         """
 
         n, d = X.shape
-        X = np.ascontiguousarray(X, dtype=np.float32)
-        cl = sklearn.cluster.KMeans(
-            n_clusters=self.n_clusters, n_init=1, verbose=verbose
-        )
+        assert n >= 1
 
-        if verbose:
-            print("Fitting IVF cluster centers")
+        with timer(verbose, "Fitting IVF cluster centers..."):
+            X = np.ascontiguousarray(X, dtype=np.float32)
+            cl = sklearn.cluster.KMeans(
+                n_clusters=self.n_clusters, n_init=1, verbose=verbose
+            )
 
-        if self.metric == "euclidean":
-            cl.fit(X)
-            self.all_centers = cl.cluster_centers_
+            if self.metric == "euclidean":
+                cl.fit(X)
+                self.all_centers = cl.cluster_centers_
 
-        elif self.metric == "angular":
-            # For angular we use kmeans clustering, but normalize the norm of the centers
-            # as to make inner product equivalent to angular similarity.
-            X /= np.linalg.norm(X, axis=1, keepdims=True)
-            cl.fit(X)
-            self.all_centers = cl.cluster_centers_
-            self.all_centers /= np.linalg.norm(self.all_centers, axis=1, keepdims=True)
-
-        # We use a single product quantizer for everything
-        if verbose:
-            print("Fitting PQ")
-        self.pq.fit(X, verbose)
+            elif self.metric == "angular":
+                # For angular we use kmeans clustering, but normalize the norm of the centers
+                # as to make inner product equivalent to angular similarity.
+                X /= np.linalg.norm(X, axis=1, keepdims=True)
+                cl.fit(X)
+                self.all_centers = cl.cluster_centers_
+                self.all_centers /= np.linalg.norm(self.all_centers, axis=1, keepdims=True)
 
         return self
 
@@ -124,39 +132,59 @@ class IVF:
             Returns the instance itself, with the index structure built and data points assigned to the nearest n_probes cluster centers.
         """
 
+        assert n_probes <= self.n_clusters
         self.data = data = X.copy()
 
-        if verbose:
-            print("Computing nearest clusters...")
+        with timer(verbose, "Computing nearest clusters..."):
+            # TODO: Use compression here, somehow.
 
-        if self.metric == "euclidean":
-            distances = cdist(data, self.all_centers)
-        elif self.metric == "angular":
-            data /= np.linalg.norm(data, axis=1, keepdims=True)
-            distances = -data @ self.all_centers.T
+            if self.metric == "euclidean":
+                distances = cdist(data, self.all_centers)
+            elif self.metric == "angular":
+                data /= np.linalg.norm(data, axis=1, keepdims=True)
+                distances = -data @ self.all_centers.T
 
-        nearest_indices = np.argpartition(distances, n_probes, axis=1)[:, :n_probes]
+            nearest_indices = bottom_k_2d(distances, n_probes)
 
-        # We make sure that all centers have at least one point.
-        # This shouldn't be a problem unless `n` is nearly as small as
-        # `n_clusters`.
-
-        self.active_centers = np.ascontiguousarray(
-            self.all_centers[np.unique(nearest_indices)], dtype=np.float32
-        )
-        self.pq_transformed_centers = self.pq.transform(self.active_centers)
-
-        for i in range(self.active_centers.shape[0]):
-            mask = np.any(nearest_indices == i, axis=1)
-            self.pq_transformed_points[i] = self.pq.transform(
-                np.ascontiguousarray(data[mask])
+        # We make sure that all centers have at least one point. This is just
+        # a simple optimiation that's useful when there's not a lot of data
+        # in the IVF, or if the query is OOD.
+        with timer(verbose, "PQ Transforming active centers..."):
+            self.active_centers = np.ascontiguousarray(
+                self.all_centers[np.unique(nearest_indices)], dtype=np.float32
             )
-            true_n = self.pq_transformed_points[i][0]
-            self.ids[i] = np.arange(data.shape[0])[mask]
+            self.pq_transformed_centers = self.pq.transform(self.active_centers)
+
+        t0, t1, t2 = 0, 0, 0
+        with timer(verbose, "Transforming points and adding them to their nearest centers..."):
+            for i in range(self.active_centers.shape[0]):
+                # TODO: This is a lot slower than it needs to be.
+                s = time.time()
+                mask = np.any(nearest_indices == i, axis=1)
+                t0 += time.time() - s
+
+                # TODO: We should be able to extract the relevant data
+                # directly from a previously transformed X.
+                # However, that would require slicing into the compressed QuickADC format,
+                # which is annoying.
+                s = time.time()
+                self.pq_transformed_points[i] = self.pq.transform(
+                    np.ascontiguousarray(data[mask])
+                )
+                t1 += time.time() - s
+
+                s = time.time()
+                self.ids[i] = np.arange(data.shape[0])[mask]
+                t2 += time.time() - s
+
+        if verbose:
+            print(f"Finding any: {t0:.1f}")
+            print(f"Transforming: {t1:.1f}")
+            print(f"Computing ids: {t2:.1f}")
 
         return self
 
-    def query(self, q, k, n_probes=1, rescore_centers=None, rescore_lists=None):
+    def query(self, q, k, n_probes=1):
         """
         Queries the data structure to find the top k closest elements to the given query vector q.
 
@@ -168,10 +196,6 @@ class IVF:
             The number of closest elements to return.
         n_probes : int, optional, default=1
             The number of probes to use for searching the closest elements.
-        rescore_centers : array-like, optional, default=None
-            The transformed center data used for rescoring. If None, the original centers are used.
-        rescore_lists : array-like, optional, default=None
-            The transformed list data used for rescoring. If None, the original lists are used.
 
         Returns
         -------
@@ -185,7 +209,7 @@ class IVF:
         dtable = self.pq.distance_table(q)
 
         # Find best centers
-        top, _ = dtable.ctop(
+        top, _ = dtable.top(
             self.pq_transformed_centers, self.active_centers, k=n_probes
         )
 
@@ -203,7 +227,11 @@ class IVF:
             query_pq_sse(
                 transformed_data, true_n, dtable.tables, indices[i], values, True
             )
-            # Convert to global indices
+            # Notice: There may be some -1s included in indices, if we didn't find
+            # enough close points. That's not actually a problem, since they will
+            # just be mapped to some arbitrary index (actually the last in ids[cl]),
+            # which may then be filtered out in pass 2.
+            # Convert to global indices:
             indices[i] = self.ids[cl][indices[i]]
 
         # Remove duplicates (only an issue if build_probes > 1)

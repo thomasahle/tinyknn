@@ -4,7 +4,7 @@ import numpy as np
 from functools import reduce
 
 from fast_pq._fast_pq import estimate_pq_sse
-from fast_pq._transform import transform_data, transform_tables
+from fast_pq._transform import transform_data, unpack, transform_tables
 
 
 def test_simple():
@@ -64,3 +64,13 @@ def _slow_pq(data0, tables0, signed):
     res = out.view(np.uint8)
     assert res.shape[0] == data0.shape[0]
     return res
+
+
+def test_unpack():
+    np.random.seed(10)
+    n, d = 16 * 13, 2 * 7
+    data = np.random.randint(16, size=(n, d)).astype(np.uint8)
+    t_data = transform_data(data)
+    data1 = unpack(t_data)
+    np.testing.assert_array_equal(data, data1)
+
