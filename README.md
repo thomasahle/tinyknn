@@ -1,6 +1,6 @@
 # Fast PQ
 FastPQ is a lightweight Python Vector Database specifically designed to offer high performance and be easy to read.
-The main ingredient is an optimized implementation of 4bit Product Quantization (PQ) which enables fast approximate distance computations.
+The main ingredient is an optimized implementation of 4bit Product Quantization (PQ) which enables fast approximate distance computations, 50 times faster than NumPy/BLAS.
 
 ![Queries / Recall](https://raw.githubusercontent.com/thomasahle/fast_pq/main/plot.png)
 
