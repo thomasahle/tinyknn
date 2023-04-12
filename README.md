@@ -48,7 +48,7 @@ We can use the `IVF` class to perform approximate nearest neighbor search with I
 ```python
 from fast_pq import IVF, FastPQ
 
-ivf = IVF("euclidean", cl=100, pq=FastPQ(dims_per_block=2))
+ivf = IVF("euclidean", cl=100, pq=FastPQ(dims_per_block=2).fit(X))
 ivf.fit(X).build(X)
 
 neighbors = ivf.query(queries, k=10, n_probes=10)
