@@ -224,6 +224,9 @@ class IVF:
 
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
+            # TODO: Maybe query_pq_sse should take self.ids[cl] as an argument.
+            # That would allow us to reuse the indices/value tables and reduce
+            # issues with duplicate points being retrieved.
             query_pq_sse(
                 transformed_data, true_n, dtable.tables, indices[i], values, True
             )
