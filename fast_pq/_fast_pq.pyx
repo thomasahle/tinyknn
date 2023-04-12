@@ -184,8 +184,9 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
                         tz = __tzcnt_u32(bits)
                         pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
 
-                        # If we are down to the padding elements, we can just stop
-                        # FIXME: Why can't we just change this to "if pos >= n: return"?
+                        # Ignore padding elements. Somehow it's faster to let the loop complete,
+                        # Rather than "if pos >= n: break" or something like that. Maybe because
+                        # of instruction pipelining?
                         if pos < n:
                             # Insert the new value into the heap
                             if signd:
