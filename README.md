@@ -90,6 +90,28 @@ In this example Fast PQ is about 16 times faster than optmized scipy/numpy.
 The reason is that Fast PQ uses a trick called [Accelerated Nearest Neighbor Search with Qick ADC](https://dl.acm.org/doi/abs/10.1145/3078971.3078992)
 with which SIMD instructions are used to perform 16 inner product operations in a single instruction.
 
+
+## Class Overview
+
+The project consists of two main classes: IVF and FastPQ. The IVF class is used to build an IVF index with cluster centers, fit a product quantizer on the data, and perform queries on the index. The FastPQ class is used to create a product quantizer that can quickly transform data and compute distance tables.
+
+IVF: This class is responsible for creating an IVF index using clustering (either Euclidean or angular) and FastPQ for quantization. It provides methods to fit the index on data, build the index with quantized data, and query the index for nearest neighbors.
+Main methods:
+
+ - **fit**: Fit the IVF index on the given data by finding cluster centers and fitting the product quantizer.
+ - **build**: Build the IVF index by assigning data points to their nearest clusters and applying the product quantizer transformation.
+ - **query**: Query the IVF index to find the k nearest neighbors for a given query point.
+
+FastPQ: This class implements a fast product quantization method using k-means clustering with 16 clusters. It provides methods for fitting the quantizer on data, transforming data using the quantizer, and computing distance tables for a given query.
+It has three main methods:
+
+ - **fit**: Fit the FastPQ model on the given data by applying k-means clustering on each block of dimensions.
+ - **transform**: Compress the given data using the FastPQ model.
+ - **distance_table**: Compute a distance table for the given query vector using the FastPQ model. See below.
+ 
+DistanceTable: This class is initialized by calling the distance_table method on FastPQ. The distance table provides methods to estimate distances between query and data points, as well as find the top nearest neighbors.
+
+
 ## Benchmarking
 To benchmark on the GloVe dataset, first download and preprocess it using
 ```
