@@ -101,7 +101,7 @@ class IVF:
         # We use a single product quantizer for everything
         if verbose:
             print("Fitting PQ")
-        self.pq.fit(X, verbose=verbose)
+        self.pq.fit(X, verbose)
 
         return self
 
@@ -142,7 +142,6 @@ class IVF:
         # `n_clusters`.
 
         self.active_centers = np.ascontiguousarray(
-            #self.all_centers[np.unique(nearest_indices.flatten())], dtype=np.float32
             self.all_centers[np.unique(nearest_indices)], dtype=np.float32
         )
         self.pq_transformed_centers = self.pq.transform(self.active_centers)

@@ -20,28 +20,14 @@ def pad(arr, mults):
     mults : tuple of int
         A tuple containing the desired multiples for each dimension of the input array.
         The length of the tuple must match the number of dimensions in the input array.
-
-    Returns
-    -------
-    new_arr : numpy.ndarray
-        The padded array with dimensions that are multiples of the specified values.
-
-    Notes
-    -----
-    The padding is added by extending the dimensions with zeros. The original data
-    remains unchanged and is located at the beginning of each dimension in the output array.
     """
-    new_shape = tuple(s + (-s) % m for s, m in zip(arr.shape, mults))
-    new_arr = np.zeros(new_shape, dtype=arr.dtype)
-    new_arr[tuple(slice(0, s) for s in arr.shape)] = arr
-    return new_arr
-
+    padding = tuple((0, (-s) % m) for s, m in zip(arr.shape, mults))
+    return np.pad(arr, pad_width=padding, mode='constant', constant_values=0)
 
 def bottom_k(arr, k):
     if k >= len(arr):
         return np.arange(len(arr))
     return np.argpartition(arr, k)[:k]
-
 
 class FastPQ:
     def __init__(self, dims_per_block):
@@ -262,16 +248,10 @@ class _FastDistanceTable:
         values = np.zeros((rescore,), dtype=np.int32)
         query_pq_sse(transformed_data, true_n, self.tables, indices, values, True)
 
-        # The transformed_data has been padded with 0-rows to a multiple of 16.
-        # We remove those "fake positives" here.
-        # good_indices = indices < true_n
-        # indices = indices[good_indices]
-
         # In a second pass we compute the true distances and return the actually
         # closest points. If we got fewer or exactly k outputs, there is no need
         # to compute the true distaneces.
         if rescore <= k:
-            # values = values[good_indices]
             return indices, values
 
         # Remove padding from q
