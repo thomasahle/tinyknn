@@ -152,14 +152,13 @@ class FastPQ:
         parts = q.reshape(-1, dpb)
 
         # Center the data in the range [-128, 128]
-        # TODO: Would this be faster if we used the same centers for each block?
         dists = self.center_norms_sq - 2 * np.einsum("ijk,ik->ij", self.centers, parts)
 
-        # We do this by shifting by the median and scaling by the nuber of blocks.
+        # We do this by shifting by the mean value and scaling by the nuber of blocks.
         # The idea is that we don't want to have an overflow as we add together
         # distances in uint8 format.
-        # TODO: Is this the best scaling formula?
-        shift = np.median(dists)
+        # The median also works well here, maybe even a bit better, but it takes longer to compute.
+        shift = np.mean(dists)
         scale = 128 / (np.max(np.abs(dists - shift)) * np.sqrt(n_blocks))
 
         # Round to nearest integer towards zero.

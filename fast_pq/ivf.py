@@ -142,7 +142,8 @@ class IVF:
         # `n_clusters`.
 
         self.active_centers = np.ascontiguousarray(
-            self.all_centers[np.unique(nearest_indices.flatten())], dtype=np.float32
+            #self.all_centers[np.unique(nearest_indices.flatten())], dtype=np.float32
+            self.all_centers[np.unique(nearest_indices)], dtype=np.float32
         )
         self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
@@ -196,8 +197,7 @@ class IVF:
 
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
-            query_pq_sse(transformed_data, true_n, dtable.tables,
-                         indices[i], values, True)
+            query_pq_sse(transformed_data, true_n, dtable.tables, indices[i], values, True)
             # Convert to global indices
             indices[i] = self.ids[cl][indices[i]]
 
