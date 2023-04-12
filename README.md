@@ -51,7 +51,7 @@ from fast_pq import IVF, FastPQ
 ivf = IVF("euclidean", cl=100, pq=FastPQ(dims_per_block=2))
 ivf.fit(X).build(X)
 
-distances, neighbors = ivf.query(queries, k=10, n_probes=10)
+neighbors = ivf.query(queries, k=10, n_probes=10)
 ```
 
 This will perform approximate nearest neighbor search using Inverted File Indexing, with 10 probes for each query. Note that we first have to call the `fit` method to build the codebook, and then the `build` method to populate the inverted file.
