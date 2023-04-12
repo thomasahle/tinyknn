@@ -15,16 +15,12 @@ It is also quick to build, requiring only a single pass of sklearn's KMeans over
 
 ## Example
 
-We will generate random data with 10000 points and 128 dimensions. We will also generate 1000 query points.
+Let's generate some random data
 
 ```python
 import numpy as np
-
-n = 10000
-d = 128
-
-X = np.random.rand(n, d)
-queries = np.random.rand(1000, d)
+X = np.random.rand(10000, 128)
+queries = np.random.rand(100, 128)
 ```
 
 We can use the `FastPQ` class to quantize the data and perform nearest neighbor search.
