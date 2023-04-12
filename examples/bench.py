@@ -57,7 +57,6 @@ num_clusters = int(num_points**0.5)
 print(f"{num_points=}, {num_dims=}, {num_queries=}, {dims_per_block=}, {num_clusters=}")
 
 true_neighbours_filename = f"trus_{num_points}_{num_queries}_{args.metric}.npy"
-#true_neighbours_filename = f"trus_{num_points}_{num_queries}.npy"
 if os.path.isfile(true_neighbours_filename):
     print("Loading true neighbours from", true_neighbours_filename)
     true_neighbours = np.load(true_neighbours_filename)

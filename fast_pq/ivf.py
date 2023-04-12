@@ -1,6 +1,7 @@
 import numpy as np
 import sklearn.cluster
 from fast_pq import bottom_k
+from ._fast_pq import query_pq_sse
 
 
 def cdist(X, Y, chunk=100):
@@ -66,7 +67,7 @@ class IVF:
         self.pq_transformed_points = [None] * n_clusters
         self.pq_transformed_centers = [None] * n_clusters
         self.n_clusters = n_clusters
-        self.lists, self.ids = [None] * n_clusters, [None] * n_clusters
+        self.ids = [None] * n_clusters
 
     def fit(self, X, verbose=False):
         """
@@ -145,12 +146,10 @@ class IVF:
         )
         self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
-        if verbose:
-            print("Move data around to localize individual clusters...")
         for i in range(self.active_centers.shape[0]):
             mask = np.any(nearest_indices == i, axis=1)
-            self.lists[i] = np.ascontiguousarray(data[mask])
-            self.pq_transformed_points[i] = self.pq.transform(self.lists[i])
+            self.pq_transformed_points[i] = self.pq.transform(np.ascontiguousarray(data[mask]))
+            true_n = self.pq_transformed_points[i][0]
             self.ids[i] = np.arange(data.shape[0])[mask]
 
         return self
@@ -184,29 +183,34 @@ class IVF:
         dtable = self.pq.distance_table(q)
 
         # Find best centers
-        top, _ = dtable.ctop(
-            self.pq_transformed_centers, self.active_centers, k=n_probes
-        )
-        # TODO: Preallocate space for js and dists rather than dynamically like this.
-        # (Even better: Keep that space allocated between queries)
-        js, dists = [], []
-        for i in top:
-            sub_n, _ = self.lists[i].shape
-            sub_js, sub_dists = dtable.ctop(self.pq_transformed_points[i], self.lists[i], k=k)
-            # Translate into global indexing
-            js.append(self.ids[i][sub_js])
-            dists.append(sub_dists)
+        top, _ = dtable.ctop(self.pq_transformed_centers, self.active_centers, k=n_probes)
 
-        # Merge datas
-        if not js:
-            # Concatenate doesn't work on empty lists
-            return js
-        js, dists = np.concatenate(js), np.concatenate(dists)
+        # For the first pass, get 2k candidates from each cluster
+        # One may experiment with tuning this. Could even try decreasing it
+        # for further away cluster centers like "late move reductions" in Stockfish.
+        rescore = 2*k + 1
+        indices = np.empty((n_probes, rescore), dtype=np.int32)
+        # We need a scratch space to store the approximate values,
+        # but we won't actually use it.
+        values = np.empty((rescore,), dtype=np.int32)
+
+        for i, cl in enumerate(top):
+            true_n, transformed_data = self.pq_transformed_points[cl]
+            query_pq_sse(transformed_data, true_n, dtable.tables,
+                         indices[i], values, True)
+            # Convert to global indices
+            indices[i] = self.ids[cl][indices[i]]
+
         # Remove duplicates (only an issue if build_probes > 1)
-        js, unique_idx = np.unique(js, return_index=True)
-        dists = dists[unique_idx]
-        if k >= len(js):
-            return js
-        best = np.argpartition(dists, kth=k)[:k]
-        return js[best]
+        indices = np.unique(indices.flatten())
+
+        # If we have less or equal to k values, there's no point in rescoring
+        if len(indices) <= k:
+            return indices
+
+        q = q[: self.data.shape[1]] # Remove padding from q
+        diff = self.data[indices] - q
+        dists = np.einsum("ij,ij->i", diff, diff)
+        best = bottom_k(dists, k=k)
+        return indices[best]
 

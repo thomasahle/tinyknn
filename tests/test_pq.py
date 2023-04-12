@@ -39,8 +39,9 @@ def _test_recall_inner(n, d, k, dpb, method):
 def test_topk():
     np.random.seed(11)
     for n in tuple(range(1, 10)) + (20, 30, 50):
-        for signed in [True, False]:
-            _test_topk_inner(n, 3, 11, 2, signed)
+        for dpb in [1, 2]:
+            for signed in [True, False]:
+                _test_topk_inner(n, 3, 11, dpb, signed)
 
 
 @pytest.mark.filterwarnings("ignore:Number of distinct clusters")
@@ -53,27 +54,34 @@ def test_topk_0():
 
 def _test_topk_inner(n, m, d, dpb, signed):
     X = np.random.randn(n, d).astype(np.float32)
+    print(f"{X=}")
     qs = np.random.randn(m, d).astype(np.float32)
+    print(f"{qs=}")
     pq = FastPQ(dims_per_block=dpb)
     _, data = pq.fit_transform(X)
+    print(f"{data=}")
 
     for q in qs:
         dtable = pq.distance_table(q)
+        print(f"{dtable=}")
 
         out = np.zeros(2 * len(data), dtype=np.uint64)
         estimate_pq_sse(data, dtable.tables, out, signed)
         est = out.view(np.int8 if signed else np.uint8)
-        # est = est[:n] # Remove padding
+        est = est[:n] # Remove padding
+        print(f"{est=}")
 
-        k = n + (-n) % 16  # Round up to nearest 16 because of padding
+        k = n
         indices = np.zeros((k,), dtype=np.int32)
         values = np.zeros((k,), dtype=np.int32)
-        query_pq_sse(data, dtable.tables, indices, values, signed)
+        query_pq_sse(data, n, dtable.tables, indices, values, signed)
 
         print("esti", est.argsort(kind="stable"))
         print("topi", indices)
         print("estv", sorted(est))
         print("topv", sorted(values))
+        print(indices)
+        print(values)
         print()
 
         # Remove padding, and ignore
@@ -86,3 +94,4 @@ def _test_topk_inner(n, m, d, dpb, signed):
         est.sort()
         est = est[est < maxv]
         assert np.all(est == values)
+

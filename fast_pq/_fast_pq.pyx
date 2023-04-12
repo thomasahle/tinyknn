@@ -110,7 +110,7 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
         out[2*i+1] = _mm_extract_epi64(block_dists, 1)              # out[2i] = block_dists[8:16]
 
 
-cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] indices,
+cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[::1] indices,
                         int[::1] vals, bool signd) nogil:
     '''
     Given a N x D dataset quantized into byte-sized chunks,
@@ -119,13 +119,24 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
     Parameters
     ----------
     data : 2D memoryview of uint64_t
-        The quantized dataset.
+        The quantized dataset. Each 64bit int represents a (four bit) column in
+        a chunk of 16 rows.
+        See _transform.py for the exact format used, borrowed from Quick ADC.
+
+    n : int
+        The actual length of the data, without the padding. Used to avoid including
+        padding elements in the final output.
+
     tables : 1D memoryview of uint64_t
-        The lookup tables.
+        The lookup tables. Each pair of 64bit ints represent a uint8[16] lookup table.
+        See _transform.py for the exact format used.
+
     indices : 1D memoryview of int
         The output indices.
+
     vals : 1D memoryview of int
         The output values.
+
     signd : bool
         Determines if the distance is signed or unsigned.
     '''
@@ -135,7 +146,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
         int cmp_bits, cmp_low, cmp_high, pos, tz, bits
         uint64_t dists
 
-    # Initialize "heap". K = is the number of top values we want
+    # Initialize heap. K = indices.shape[0] is the number of top values we want.
     if signd:
         for i in range(indices.shape[0]):
             indices[i] = -1
@@ -147,8 +158,14 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
             vals[i] = 0xff
         top_bound = _mm_set1_epi8(0xff)
 
+    # Iterate through the data chunks
     for i in range(data.shape[0]):
+        # Compute the (8 bit) distances from the query to each of the points in the 16 point block
         block_dists = compute_block_dists(&data[i,0], data.shape[1]//2, tables, signd)
+
+        # Compare the computed block distances with the current largest distance. If none of the
+        # new points are small enough to be added to the heap, we can just ignore the block and
+        # move on.
         if signd:
             cmp_mask = _mm_cmplt_epi8(block_dists, top_bound)
         else:
@@ -156,26 +173,36 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables, int[::1] ind
             cmp_mask = _mm_cmplt_epi8(
                 _mm_add_epi8 (block_dists, _mm_set1_epi8(-128)),
                 _mm_add_epi8 (top_bound, _mm_set1_epi8(-128)))
+
+        # Collect "compare mask" into a simple 16 bit integer
         cmp_bits = _mm_movemask_epi8(cmp_mask)
+        # If there are any bits set in the comparison mask, process them
         if cmp_bits:
-            #print('cmp_bits', bin(cmp_bits))
+            # Handle upper and lower 64 bits of block_dists individually
             for j in range(2):
                 bits = (cmp_bits >> 8*j) & 0xff
                 if bits:
                     if j == 0: dists = _mm_extract_epi64(block_dists, 0)
                     if j == 1: dists = _mm_extract_epi64(block_dists, 1)
+                    # pos is the index/label of the point.
                     pos = i * 16 + 8*j
+                    # Iterate through the bits individually
                     while bits:
+                        # Find the first 1 and shift the zeros away (tz = trailing zeros.)
+                        # Alternative: "if not bits & 1: bits >>= 1; continue"
                         tz = __tzcnt_u32(bits)
-                        #print(pos, bin(dists), bin(bits), tz)
                         pos, bits, dists = pos+tz, bits >> tz, dists >> 8*(tz)
-                        #print('insert', pos, signd, (dists&0xff), <byte>(dists & 0xff))
-                        if signd:
-                            insert(indices, vals, pos, <byte>(dists & 0xff))
-                        else:
-                            insert(indices, vals, pos, dists & 0xff)
-                        #print(list(vals))
+
+                        # If we are down to the padding elements, we can just stop
+                        if pos < n:
+                            # Insert the new value into the heap
+                            if signd:
+                                insert(indices, vals, pos, <byte>(dists & 0xff))
+                            else:
+                                insert(indices, vals, pos, dists & 0xff)
+
                         pos, bits, dists = pos+1, bits >> 1, dists >> 8
+
             # Update bound vector to equal 16 times the largest distance in the array
             # top_bound = _mm_set1_epi8(vals[-1]) # With insertion sort, the max is at the end
             top_bound = _mm_set1_epi8(vals[0]) # If we use the heap, the max is at the start

@@ -17,6 +17,7 @@ import numpy as np
 #    q0 q1 r0 ...    <- New chunk
 # Also remember that storage inside uint64 is right-to-left
 
+
 # Table standard format
 #    -a1- -a2- ... -a16-
 #    -b1- -b2- ... -b16-
@@ -31,9 +32,37 @@ import numpy as np
 
 
 def transform_data(data0):
-    # Takes data and tables in standard format and convers to quick-adc format
-    # Entries in data0 should be 4 bits
-    # Entries in tables0 should be 8 bits
+    """
+    Transform data from the standard format to the Quick-ADC format.
+
+    The standard format is a 2D array with n rows and d columns.
+    Each entry in the array is a 4-bit value, corresponding to a pointer to a cluster center.
+
+    The Quick ADC format is a transformed version of the standard format, optimized
+    for processing in the Quick-ADC algorithm. The data is first reshaped into groups of 16 rows,
+    and interleaved by pairs of consecutive columns. Each group of 16 rows becomes a chunk.
+    Within a chunk, data is stored in a 64-bit row-major order, with consecutive 4-bit values
+    from 16 different rows combined into a single 64-bit value. The storage inside the 64-bit
+    value is right-to-left, meaning that the first 4-bit value appears at the least significant
+    bits of the 64-bit value.
+
+    The transform_table function does the equivalent transformation for distance tables.
+    For the tables, the standard format consists of 8-bit values in a 2D array. In the Quick ADC
+    format, the tables are reshaped so that each row is divided into two equal parts and stacked
+    one after the other.
+
+    Parameters
+    ----------
+    data0 : numpy.ndarray
+        A 2D input array with 4-bit entries. Its shape should be (n, d), where
+        n is a multiple of 16 and d is even.
+
+    Returns
+    -------
+    data : numpy.ndarray
+        A transformed 2D array with dtype `np.uint64`. Its shape is (n // 16, d)
+        since the 4-bit values have been packed in groups of 16.
+    """
     n, d = data0.shape
     assert d % 2 == 0  # Because we load two rows at a time (128bits)
     assert np.all(data0 < 16) and np.all(0 <= data0)
@@ -60,9 +89,9 @@ def transform_data(data0):
         assert data[0, 2, -2] == data0[0][3]
     assert data.shape == (n // 16, d, 16)
     # Converting last dimension to a single 64 bit number
-    # TODO: This is quite slow. Maybe there's a fast way like the view(np.unit8)
-    #       we use in transform_query?
-    data = np.frompyfunc(lambda x, y: (x << 4 | y), 2, 1).reduce(data, axis=2)
+    # data = np.frompyfunc(lambda x, y: (x << 4 | y), 2, 1).reduce(data, axis=2)
+    shifts = np.arange(15, -1, -1) * 4
+    data = (data << shifts).sum(axis=2, dtype=np.uint64)
     data = np.ascontiguousarray(data, dtype=np.uint64)
     assert data.shape == (n // 16, d)
     return data

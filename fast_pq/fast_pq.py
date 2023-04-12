@@ -207,6 +207,10 @@ class _FastDistanceTable:
         self.scale = scale
         self.signed = signed
 
+    def __repr__(self):
+        return f"FastDistanceTable(q={self.q}, tables={self.tables}, mean={self.mean}, " \
+                                  "scale={self.scale}, signed={self.signed})"
+
     def estimate_distances(self, transformed_data, out=None, rescale=False):
         true_n, transformed_data = transformed_data
         if out is None:
@@ -257,18 +261,18 @@ class _FastDistanceTable:
 
         indices = np.zeros((rescore,), dtype=np.int32)
         values = np.zeros((rescore,), dtype=np.int32)
-        query_pq_sse(transformed_data, self.tables, indices, values, True)
+        query_pq_sse(transformed_data, true_n, self.tables, indices, values, True)
 
         # The transformed_data has been padded with 0-rows to a multiple of 16.
         # We remove those "fake positives" here.
-        good_indices = indices < true_n
-        indices = indices[good_indices]
+        # good_indices = indices < true_n
+        # indices = indices[good_indices]
 
         # In a second pass we compute the true distances and return the actually
         # closest points. If we got fewer or exactly k outputs, there is no need
         # to compute the true distaneces.
         if rescore <= k:
-            values = values[good_indices]
+            # values = values[good_indices]
             return indices, values
 
         # Remove padding from q
