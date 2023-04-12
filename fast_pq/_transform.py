@@ -96,6 +96,7 @@ def transform_data(data0):
     assert data.shape == (n // 16, d)
     return data
 
+
 def transform_tables(tables0):
     d, b = tables0.shape
     assert d % 2 == 0  # Because we load two rows at a time (128bits)
@@ -107,4 +108,3 @@ def transform_tables(tables0):
     tables = tables.view(np.uint64)[:, 0]
     assert tables.shape == (2 * d,)
     return tables
-

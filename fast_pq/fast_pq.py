@@ -9,25 +9,28 @@ from ._fast_pq import query_pq_sse, estimate_pq_sse
 
 warnings.simplefilter("error", category=ConvergenceWarning)
 
-def pad(arr, mults):
-    """
-    Pad an input array with zeros such that its dimensions are multiples of the specified values.
 
-    Parameters
-    ----------
-    arr : numpy.ndarray
-        The input array to be padded.
-    mults : tuple of int
-        A tuple containing the desired multiples for each dimension of the input array.
-        The length of the tuple must match the number of dimensions in the input array.
-    """
-    padding = tuple((0, (-s) % m) for s, m in zip(arr.shape, mults))
-    return np.pad(arr, pad_width=padding, mode='constant', constant_values=0)
+def pad1(arr, m):
+    (s,) = arr.shape
+    new_shape = (s + (-s) % m,)
+    padded_arr = np.zeros(new_shape, dtype=arr.dtype)
+    padded_arr[:s] = arr
+    return padded_arr
+
+
+def pad2(arr, m1, m2):
+    s1, s2 = arr.shape
+    new_shape = (s1 + (-s1) % m1, s2 + (-s2) % m2)
+    padded_arr = np.zeros(new_shape, dtype=arr.dtype)
+    padded_arr[:s1, :s2] = arr
+    return padded_arr
+
 
 def bottom_k(arr, k):
     if k >= len(arr):
         return np.arange(len(arr))
     return np.argpartition(arr, k)[:k]
+
 
 class FastPQ:
     def __init__(self, dims_per_block):
@@ -63,7 +66,7 @@ class FastPQ:
         # SSE assumes the number of rows is divisible by 16.
         # It also needs the number of columns to be even, so we pad to a multiple
         # of 2 * self.dims_per_block.
-        data = pad(data, (16, 2 * self.dims_per_block))
+        data = pad2(data, 16, 2 * self.dims_per_block)
         n, d = data.shape
         assert d % self.dims_per_block == 0
         assert (d // self.dims_per_block) % 2 == 0
@@ -104,7 +107,7 @@ class FastPQ:
         if data.size == 0:
             return data
         true_n = data.shape[0]
-        data = pad(data, (16, 2 * self.dims_per_block))
+        data = pad2(data, 16, 2 * self.dims_per_block)
         n, d = data.shape
         assert n % 16 == 0
         parts = data.reshape(n, -1, self.dims_per_block)
@@ -131,7 +134,7 @@ class FastPQ:
         _FastDistanceTable
             The FastDistanceTable object containing the computed distance table.
         """
-        q = pad(q, (2 * self.dims_per_block,))
+        q = pad1(q, 2 * self.dims_per_block)
         dpb = self.dims_per_block
         n_blocks = q.size / dpb
 
@@ -144,7 +147,7 @@ class FastPQ:
         # The idea is that we don't want to have an overflow as we add together
         # distances in uint8 format.
         # The median also works well here, maybe even a bit better, but it takes longer to compute.
-        shift = np.mean(dists)
+        shift = np.median(dists)
         scale = 128 / (np.max(np.abs(dists - shift)) * np.sqrt(n_blocks))
 
         # Round to nearest integer towards zero.
@@ -170,7 +173,7 @@ class FastPQ:
         _FastDistanceTable
             The FastDistanceTable object containing the computed unsigned distance table.
         """
-        q = pad(q, (2 * self.dims_per_block,))
+        q = pad1(q, 2 * self.dims_per_block)
         dpb = self.dims_per_block
         n_blocks = q.size / dpb
         parts = q.reshape(-1, dpb)
@@ -193,8 +196,10 @@ class _FastDistanceTable:
         self.signed = signed
 
     def __repr__(self):
-        return f"FastDistanceTable(q={self.q}, tables={self.tables}, mean={self.mean}, " \
-                                  "scale={self.scale}, signed={self.signed})"
+        return (
+            f"FastDistanceTable(q={self.q}, tables={self.tables}, mean={self.mean}, "
+            "scale={self.scale}, signed={self.signed})"
+        )
 
     def estimate_distances(self, transformed_data, out=None, rescale=False):
         true_n, transformed_data = transformed_data
@@ -286,4 +291,3 @@ class DummyDistanceTable:
         dists = self.estimate_distances(transformed_data)
         best = bottom_k(dists, k)
         return best, dists[best]
-

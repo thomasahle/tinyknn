@@ -10,7 +10,7 @@ def cdist(X, Y, chunk=100):
     Returns R st. R[i,j] = dist(X_i, Y_j)^2.
     Equivalent to scipy.spatial.distance.cdist.
     """
-    # This is how sklearn computes row norms. It 
+    # This is how sklearn computes row norms. It
     # %timeit np.linalg.norm(x, axis=1)
     # 486 ms ± 6.33 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
     # %timeit np.einsum('ij,ij->i',x,x)
@@ -42,7 +42,7 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
         Xn = X / np.sqrt(nx[:, None])
         Yn = Y / np.sqrt(ny[:, None])
         for i in range(0, nx.size, chunk):
-            part = - 2 * Xn[i : i + chunk] @ Yn.T
+            part = -2 * Xn[i : i + chunk] @ Yn.T
             res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
     else:
         raise ValueError(f"Metric not supported: {metric}")
@@ -133,7 +133,7 @@ class IVF:
             distances = cdist(data, self.all_centers)
         elif self.metric == "angular":
             data /= np.linalg.norm(data, axis=1, keepdims=True)
-            distances = - data @ self.all_centers.T
+            distances = -data @ self.all_centers.T
 
         nearest_indices = np.argpartition(distances, n_probes, axis=1)[:, :n_probes]
 
@@ -148,7 +148,9 @@ class IVF:
 
         for i in range(self.active_centers.shape[0]):
             mask = np.any(nearest_indices == i, axis=1)
-            self.pq_transformed_points[i] = self.pq.transform(np.ascontiguousarray(data[mask]))
+            self.pq_transformed_points[i] = self.pq.transform(
+                np.ascontiguousarray(data[mask])
+            )
             true_n = self.pq_transformed_points[i][0]
             self.ids[i] = np.arange(data.shape[0])[mask]
 
@@ -183,12 +185,14 @@ class IVF:
         dtable = self.pq.distance_table(q)
 
         # Find best centers
-        top, _ = dtable.ctop(self.pq_transformed_centers, self.active_centers, k=n_probes)
+        top, _ = dtable.ctop(
+            self.pq_transformed_centers, self.active_centers, k=n_probes
+        )
 
         # For the first pass, get 2k candidates from each cluster
         # One may experiment with tuning this. Could even try decreasing it
         # for further away cluster centers like "late move reductions" in Stockfish.
-        rescore = 2*k + 1
+        rescore = 2 * k + 1
         indices = np.empty((n_probes, rescore), dtype=np.int32)
         # We need a scratch space to store the approximate values,
         # but we won't actually use it.
@@ -196,7 +200,9 @@ class IVF:
 
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
-            query_pq_sse(transformed_data, true_n, dtable.tables, indices[i], values, True)
+            query_pq_sse(
+                transformed_data, true_n, dtable.tables, indices[i], values, True
+            )
             # Convert to global indices
             indices[i] = self.ids[cl][indices[i]]
 
@@ -207,9 +213,8 @@ class IVF:
         if len(indices) <= k:
             return indices
 
-        q = q[: self.data.shape[1]] # Remove padding from q
+        q = q[: self.data.shape[1]]  # Remove padding from q
         diff = self.data[indices] - q
         dists = np.einsum("ij,ij->i", diff, diff)
         best = bottom_k(dists, k=k)
         return indices[best]
-

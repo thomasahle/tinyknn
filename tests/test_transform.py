@@ -3,22 +3,8 @@ import math
 import numpy as np
 from functools import reduce
 
-from fast_pq import pad
 from fast_pq._fast_pq import estimate_pq_sse
 from fast_pq._transform import transform_data, transform_tables
-
-
-def test_pad():
-    np.random.seed(12)
-    for _ in range(10):
-        for d in range(1, 4):
-            for m in range(1, 4):
-                shape = [np.random.randint(1, 10) for _ in range(d)]
-                ar = np.zeros(shape)
-                shape2 = pad(ar, [m] * d).shape
-                assert all(
-                    s1 <= s2 < s1 + m and s2 % m == 0 for s1, s2 in zip(shape, shape2)
-                )
 
 
 def test_simple():
