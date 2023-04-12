@@ -193,7 +193,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
                             else:
                                 insert(indices, vals, pos, dists & 0xff)
 
-                            pos, bits, dists = pos+1, bits >> 1, dists >> 8
+                        pos, bits, dists = pos+1, bits >> 1, dists >> 8
 
             # Update bound vector to equal 16 times the largest distance in the array
             top_bound = _mm_set1_epi8(vals[0])
