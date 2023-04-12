@@ -109,8 +109,11 @@ It has three main methods:
  - **transform**: Compress the given data using the FastPQ model.
  - **distance_table**: Compute a distance table for the given query vector using the FastPQ model. See below.
  
-DistanceTable: This class is initialized by calling the distance_table method on FastPQ. The distance table provides methods to estimate distances between query and data points, as well as find the top nearest neighbors.
+DistanceTable: This class is initialized by calling the distance_table method on FastPQ with a *query point*. The distance table provides methods to estimate distances between query and data points, as well as find the top nearest neighbors. It has two methods:
 
+ - **estimate_distances**: Estimate the distance from the *query point* to a set of quantized (PQ transformed) data points.
+
+ - **top**: Finds the *k* data points nearest to the query, given both quantized and raw data points. The method works in two passes: First *3k* or so nearest points, according to the quantized data, are retrieved. Then the raw data is used to rescore and return the best *k* points among those.
 
 ## Benchmarking
 To benchmark on the GloVe dataset, first download and preprocess it using
