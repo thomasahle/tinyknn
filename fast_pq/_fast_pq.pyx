@@ -240,11 +240,12 @@ cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
     return block_dists
 
 
+# Maybe it's silly to have this is cython, rather than just use numpy.
 cpdef void init_heap(long[::1] indices, int[::1] vals, bool signd) nogil:
     cdef:
         int K = indices.shape[0]
-    # TODO: Why not use a dummy value larger than 8bit, if we are going to store
-    # the values in an int array anyway?
+    # Even though we have an int array, we have to use values that fit in 8 bits,
+    # since we are going to broadcast them to an __m128i.
     if signd:
         for i in range(K):
             indices[i] = -1
@@ -255,7 +256,8 @@ cpdef void init_heap(long[::1] indices, int[::1] vals, bool signd) nogil:
             vals[i] = 255
 
 
-cpdef void insert_sorted(long[::1] indices, int[::1] vals, long i, int v) nogil:
+# Using insertion sort. Also an option.
+cpdef void insert_is(long[::1] indices, int[::1] vals, long i, int v) nogil:
     cdef:
         int n = indices.shape[0]
         int j = 0
@@ -273,7 +275,7 @@ cpdef void insert_sorted(long[::1] indices, int[::1] vals, long i, int v) nogil:
     indices[j], vals[j] = i, v
 
 
-cpdef void insert(long[::1] indices, int[::1] vals, long i, int v) nogil:
+cpdef void insert_old(long[::1] indices, int[::1] vals, long i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
     # since that's the one we are kicking out. Thus this is a max-heap with
@@ -295,19 +297,56 @@ cpdef void insert(long[::1] indices, int[::1] vals, long i, int v) nogil:
     # Swap with the children until we are at least as large as both of them,
     # or we reach the end of the array.
     while True:
+        # Our current candidate for the next node: don't change.
         nxt = j
         l, r = 2*j+1, 2*j+2
-        # Pick a larger child, assuming we don't go out of bounds.
-        # Doesn't matter which.
+        # Swap with the largest of the two children, assuming
+        # then are not out of bounds.
         if l < n and vals[l] > vals[nxt]: nxt = l
         if r < n and vals[r] > vals[nxt]: nxt = r
-        # If there were no larger children, we are done.
+        # If we didn't pick any of the children, we are done.
         if nxt == j:
             break
-        # Swap the values.
+        # Swap with the child.
         vals[nxt], vals[j] = vals[j], vals[nxt]
         indices[nxt], indices[j] = indices[j], indices[nxt]
         j = nxt
+
+
+cpdef void insert(long[::1] indices, int[::1] vals, long i, int v) nogil:
+    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
+    # We need to easily be able to identify the largest element in the heap,
+    # since that's the one we are kicking out. Thus this is a max-heap with
+    # the largest value at 0.
+    cdef:
+        int n = indices.shape[0]
+        int j = 0
+        int nxt, l, r, nxt_val
+
+    # First see if we are already in the array
+    for j in range(n):
+        if i == indices[j]:
+            return
+    j = 0
+
+    # Swap values up until both are smaller than v, or we reach the end of the array.
+    while True:
+        # Our current candidate for the next node: don't change.
+        nxt, nxt_val = j, v
+        l, r = 2*j+1, 2*j+2
+        # Swap with the largest of the two children, assuming
+        # then are not out of bounds.
+        if l < n and vals[l] > nxt_val:
+            nxt, nxt_val = l, vals[l]
+        if r < n and vals[r] > nxt_val:
+            nxt, nxt_val = r, vals[r]
+        # If we didn't pick any of the children, we are done.
+        if nxt == j:
+            vals[j], indices[j] = v, i
+            break
+        # Move the value up
+        j, vals[j], indices[j] = nxt, vals[nxt], indices[nxt]
+
 
 
 # Maybe it doesn't make sense to do a real insertion sort, since we have to break

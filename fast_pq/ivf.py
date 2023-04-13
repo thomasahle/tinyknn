@@ -220,16 +220,15 @@ class IVF:
         # We need a scratch space to store the approximate values,
         # but we won't actually use it.
         values = np.empty((rescore,), dtype=np.int32)
-        init_heap(indices, values, True)
+        indices[:] = -1
+        values[:] = 127
+        #init_heap(indices, values, True)
 
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
             query_pq_sse(
                 transformed_data, true_n, dtable.tables, indices, values, True, labels=self.ids[cl]
             )
-            #print(i, true_n, indices.tolist().count(-1))
-            #print(indices)
-            #print(values)
 
         # Remove duplicates (only an issue if build_probes > 1)
         indices = np.unique(indices)

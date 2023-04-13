@@ -25,7 +25,7 @@ for line in data.split("\n"):
         queries_per_second.append(qps_value)
 
 # Plot the data
-for l, recall, queries_per_second in fast_pq_series:
+for l, recall, queries_per_second in fast_pq_series[:2]:
     plt.plot(recall, queries_per_second, marker='o', label=f"FastPQ {l} build probes")
 for l, recall, queries_per_second in annoy_series:
     plt.plot(recall, queries_per_second, marker='o', label=f"Annoy {l} trees")

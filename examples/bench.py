@@ -99,7 +99,8 @@ for build_probes in range(1, n_max_build_probes):
     recall = 0
     n_probes = 1
     qpss, recalls = [], []
-    while (build_probes == 1 and recall < .8) or (build_probes > 1 and recall < .9):
+    #while (build_probes == 1 and recall < .8) or (build_probes > 1 and recall < .9):
+    while recall < .9:
         start = time.time()
         found = 0
 
