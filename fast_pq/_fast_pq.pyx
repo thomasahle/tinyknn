@@ -346,7 +346,8 @@ cpdef void insert(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
             vals[j], indices[j] = v, i
             break
         # Move the value up
-        j, vals[j], indices[j] = nxt, vals[nxt], indices[nxt]
+        vals[j], indices[j] = vals[nxt], indices[nxt]
+        j = nxt
 
 
 
