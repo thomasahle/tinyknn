@@ -62,7 +62,7 @@ def test_random():
         if v < top_pyheap:
             heapq.heappop(pyheap)
             heapq.heappush(pyheap, (-v, t))
-        assert heap.peek() == -pyheap[0][0]
+        assert set(heap.vals) == set(-vi for vi, _ in pyheap)
 
 
 def test_heap():

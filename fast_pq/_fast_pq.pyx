@@ -36,6 +36,7 @@
 
 cdef extern from *:
     ctypedef int uint64_t "__uint64_t"
+    ctypedef int int64_t "__int64_t"
     ctypedef int uint128_t "__uint128_t"
     ctypedef int byte "__int8_t"
 
@@ -111,8 +112,8 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
 
 
 cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables,
-                        long[::1] indices, int[::1] vals, bool signd,
-                        long[::1] labels = None,
+                        int64_t[::1] indices, int[::1] vals, bool signd,
+                        int64_t[::1] labels = None,
                         ) nogil:
     '''
     Given a N x D dataset quantized into byte-sized chunks,
@@ -147,7 +148,7 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables,
         __m128i block_dists, top_bound, cmp_mask
         int cmp_bits, tz, bits
         uint64_t dists
-        long label
+        int64_t label
 
     top_bound = _mm_set1_epi8(vals[0])
 
@@ -241,7 +242,7 @@ cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
 
 
 # Maybe it's silly to have this is cython, rather than just use numpy.
-cpdef void init_heap(long[::1] indices, int[::1] vals, bool signd) nogil:
+cpdef void init_heap(int64_t[::1] indices, int[::1] vals, bool signd) nogil:
     cdef:
         int K = indices.shape[0]
     # Even though we have an int array, we have to use values that fit in 8 bits,
@@ -257,7 +258,7 @@ cpdef void init_heap(long[::1] indices, int[::1] vals, bool signd) nogil:
 
 
 # Using insertion sort. Also an option.
-cpdef void insert_is(long[::1] indices, int[::1] vals, long i, int v) nogil:
+cpdef void insert_is(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
     cdef:
         int n = indices.shape[0]
         int j = 0
@@ -275,7 +276,7 @@ cpdef void insert_is(long[::1] indices, int[::1] vals, long i, int v) nogil:
     indices[j], vals[j] = i, v
 
 
-cpdef void insert_old(long[::1] indices, int[::1] vals, long i, int v) nogil:
+cpdef void insert_old(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
     # since that's the one we are kicking out. Thus this is a max-heap with
@@ -313,7 +314,7 @@ cpdef void insert_old(long[::1] indices, int[::1] vals, long i, int v) nogil:
         j = nxt
 
 
-cpdef void insert(long[::1] indices, int[::1] vals, long i, int v) nogil:
+cpdef void insert(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
     # since that's the one we are kicking out. Thus this is a max-heap with
