@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.cluster
 from fast_pq import bottom_k, bottom_k_2d
-from ._fast_pq import query_pq_sse
+from ._fast_pq import query_pq_sse, init_heap
 import time
 from contextlib import contextmanager
 
@@ -174,7 +174,7 @@ class IVF:
                 t1 += time.time() - s
 
                 s = time.time()
-                self.ids[i] = np.arange(data.shape[0])[mask]
+                self.ids[i] = np.arange(data.shape[0], dtype=np.int64)[mask]
                 t2 += time.time() - s
 
         if verbose:
@@ -214,31 +214,29 @@ class IVF:
         )
 
         # For the first pass, get 2k candidates from each cluster
-        # One may experiment with tuning this. Could even try decreasing it
-        # for further away cluster centers like "late move reductions" in Stockfish.
-        rescore = 2 * k + 1
-        indices = np.empty((n_probes, rescore), dtype=np.int32)
+        # One may experiment with tuning this. Could even make it an argument to query.
+        rescore = (n_probes + 1) * k + 1
+        indices = np.empty((rescore,), dtype=np.int64)
         # We need a scratch space to store the approximate values,
         # but we won't actually use it.
         values = np.empty((rescore,), dtype=np.int32)
+        init_heap(indices, values, True)
 
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
-            # TODO: Maybe query_pq_sse should take self.ids[cl] as an argument.
-            # That would allow us to reuse the indices/value tables and reduce
-            # issues with duplicate points being retrieved.
             query_pq_sse(
-                transformed_data, true_n, dtable.tables, indices[i], values, True
+                transformed_data, true_n, dtable.tables, indices, values, True, labels=self.ids[cl]
             )
-            # Notice: There may be some -1s included in indices, if we didn't find
-            # enough close points. That's not actually a problem, since they will
-            # just be mapped to some arbitrary index (actually the last in ids[cl]),
-            # which may then be filtered out in pass 2.
-            # Convert to global indices:
-            indices[i] = self.ids[cl][indices[i]]
+            #print(i, true_n, indices.tolist().count(-1))
+            #print(indices)
+            #print(values)
 
         # Remove duplicates (only an issue if build_probes > 1)
-        indices = np.unique(indices.flatten())
+        indices = np.unique(indices)
+
+        # We may have gotten some heap padding elements mixed in
+        if indices.size != 0 and indices[0] == -1:
+            indices = indices[1:]
 
         # If we have less or equal to k values, there's no point in rescoring
         if len(indices) <= k:

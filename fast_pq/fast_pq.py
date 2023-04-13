@@ -6,7 +6,7 @@ import warnings
 from sklearn.exceptions import ConvergenceWarning
 
 from ._transform import transform_data, transform_tables
-from ._fast_pq import query_pq_sse, estimate_pq_sse
+from ._fast_pq import query_pq_sse, estimate_pq_sse, init_heap
 
 warnings.simplefilter("error", category=ConvergenceWarning)
 
@@ -244,8 +244,9 @@ class _FastDistanceTable:
             rescore = min(2 * k + 10, true_n)
         assert true_n >= rescore >= k
 
-        indices = np.zeros((rescore,), dtype=np.int32)
+        indices = np.zeros((rescore,), dtype=np.int64)
         values = np.zeros((rescore,), dtype=np.int32)
+        init_heap(indices, values, True)
         query_pq_sse(transformed_data, true_n, self.tables, indices, values, True)
 
         # In a second pass we compute the true distances and return the actually

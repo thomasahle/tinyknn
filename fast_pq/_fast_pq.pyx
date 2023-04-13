@@ -110,8 +110,10 @@ cpdef void estimate_pq_sse(uint64_t[:,::1] data, uint64_t[::1] tables,
         out[2*i+1] = _mm_extract_epi64(block_dists, 1)              # out[2i] = block_dists[8:16]
 
 
-cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[::1] indices,
-                        int[::1] vals, bool signd) nogil:
+cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables,
+                        long[::1] indices, int[::1] vals, bool signd,
+                        long[::1] labels = None,
+                        ) nogil:
     '''
     Given a N x D dataset quantized into byte-sized chunks,
     looks up each value in a table and outputs into `out`.
@@ -141,12 +143,12 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
         Determines if the distance is signed or unsigned.
     '''
     cdef:
-        int i, j
+        int i, j, pos
         __m128i block_dists, top_bound, cmp_mask
-        int cmp_bits, cmp_low, cmp_high, pos, tz, bits
+        int cmp_bits, tz, bits
         uint64_t dists
+        long label
 
-    init_heap(indices, vals, signd)
     top_bound = _mm_set1_epi8(vals[0])
 
     # Iterate through the data chunks
@@ -189,10 +191,13 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int[:
                         # of instruction pipelining?
                         if pos < n:
                             # Insert the new value into the heap
+                            # TODO: What about labels than don't fit in an int?
+                            # How many bits are even in an int?
+                            label = pos if labels is None else labels[pos]
                             if signd:
-                                insert(indices, vals, pos, <byte>(dists & 0xff))
+                                insert(indices, vals, label, <byte>(dists & 0xff))
                             else:
-                                insert(indices, vals, pos, dists & 0xff)
+                                insert(indices, vals, label, dists & 0xff)
 
                         pos, bits, dists = pos+1, bits >> 1, dists >> 8
 
@@ -235,20 +240,40 @@ cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
     return block_dists
 
 
-cpdef void init_heap(int[::1] indices, int[::1] vals, bool signd) nogil:
+cpdef void init_heap(long[::1] indices, int[::1] vals, bool signd) nogil:
     cdef:
         int K = indices.shape[0]
+    # TODO: Why not use a dummy value larger than 8bit, if we are going to store
+    # the values in an int array anyway?
     if signd:
         for i in range(K):
             indices[i] = -1
-            vals[i] = 0x7f
+            vals[i] = 127
     else:
         for i in range(K):
             indices[i] = -1
-            vals[i] = 0xff
+            vals[i] = 255
 
 
-cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
+cpdef void insert_sorted(long[::1] indices, int[::1] vals, long i, int v) nogil:
+    cdef:
+        int n = indices.shape[0]
+        int j = 0
+    # First see if we are already in the array
+    for j in range(n):
+        if i == indices[j]:
+            return
+    j = 0
+    # We assume that vals[0] > v, or this function wouldn't have been called
+    # in the first place.
+    while j+1 != n and vals[j+1] > v:
+        # Shift left
+        indices[j], vals[j] = indices[j+1], vals[j+1]
+        j += 1
+    indices[j], vals[j] = i, v
+
+
+cpdef void insert(long[::1] indices, int[::1] vals, long i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
     # since that's the one we are kicking out. Thus this is a max-heap with
@@ -257,6 +282,13 @@ cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
         int n = indices.shape[0]
         int j = 0
         int nxt, l, r
+
+    # First see if we are already in the array
+    for j in range(n):
+        if i == indices[j]:
+            return
+    j = 0
+
     # Insert the new value at the top, replacing the old furthest point.
     # We assume it's given that our value is at most as large as that old point.
     indices[0], vals[0] = i, v
@@ -265,7 +297,8 @@ cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
     while True:
         nxt = j
         l, r = 2*j+1, 2*j+2
-        # Find a larger child, assuming we don't go out of bounds.
+        # Pick a larger child, assuming we don't go out of bounds.
+        # Doesn't matter which.
         if l < n and vals[l] > vals[nxt]: nxt = l
         if r < n and vals[r] > vals[nxt]: nxt = r
         # If there were no larger children, we are done.
@@ -276,3 +309,27 @@ cpdef void insert(int[::1] indices, int[::1] vals, int i, int v) nogil:
         indices[nxt], indices[j] = indices[j], indices[nxt]
         j = nxt
 
+
+# Maybe it doesn't make sense to do a real insertion sort, since we have to break
+# up values across their boundary all the time when shifting.
+# Instead we could relax the requirement, and say that we dont' need to be sorted
+# in each "block"?
+# void simd_insert_8bit(__m128i* arr, size_t num_blocks, uint8_t value) {
+#     __m128i xmm_value = _mm_set1_epi8(value);
+#     bool inserted = false;
+# 
+#     for (size_t i = 0; i < num_blocks; ++i) {
+#         __m128i xmm_current = arr[i];
+#         __m128i xmm_less_mask = _mm_cmplt_epi8(xmm_current, xmm_value);
+# 
+#         if not inserted and _mm_movemask_epi8(xmm_less_mask):
+#             # The value has not been inserted yet and there is a position to insert it
+#             xmm_current = _mm_alignr_epi8(xmm_value, xmm_current, 15);
+#             inserted = True;
+#         elif inserted:
+#             # The value has already been inserted, shift the remaining elements
+#             __m128i xmm_prev = arr[i - 1];
+#             xmm_current = _mm_alignr_epi8(xmm_current, xmm_prev, 15);
+#         arr[i] = xmm_current;
+#     }
+# }

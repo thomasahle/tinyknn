@@ -36,7 +36,9 @@ def test_small_n():
             q = np.random.randn(d).astype(np.float32)
             ivf = IVF(metric, 1, FastPQ(2).fit(X))
             ivf.fit(X).build(X,n_probes=1)
-            assert all(0 <= i < n for i in ivf.query(q, n))
+            res = ivf.query(q, n)
+            print(res)
+            assert all(0 <= i < n for i in res)
 
 
 def test_far_small_n():
@@ -48,7 +50,9 @@ def test_far_small_n():
             q = np.random.randn(d).astype(np.float32)
             ivf = IVF(metric, 1, pq=FastPQ(2).fit(X))
             ivf.fit(X).build(X, n_probes=1)
-            assert all(0 <= i < n for i in ivf.query(q, n))
+            res = ivf.query(q, n)
+            print(res)
+            assert all(0 <= i < n for i in res)
 
 
 def test_euclidian_recall():

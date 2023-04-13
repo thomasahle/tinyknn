@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from fast_pq._fast_pq import estimate_pq_sse, query_pq_sse
+from fast_pq._fast_pq import estimate_pq_sse, query_pq_sse, init_heap
 from fast_pq import FastPQ, cdist
 
 
@@ -77,8 +77,9 @@ def _test_topk_inner(n, m, d, dpb, signed):
         est = est[:n] # Remove padding
 
         k = n
-        indices = np.zeros((k,), dtype=np.int32)
+        indices = np.zeros((k,), dtype=np.int64)
         values = np.zeros((k,), dtype=np.int32)
+        init_heap(indices, values, signed)
         query_pq_sse(data, n, dtable.tables, indices, values, signed)
 
         # Remove padding, and ignore
@@ -91,4 +92,22 @@ def _test_topk_inner(n, m, d, dpb, signed):
         est.sort()
         est = est[est < maxv]
         assert np.all(est == values)
+
+
+def test_large_labels():
+    n, d, k = 100, 10, 100
+    X = np.random.randn(n, d).astype(np.float32)
+    q = np.random.randn(d).astype(np.float32)
+
+    pq = FastPQ(2)
+    _, data = pq.fit_transform(X)
+    dtable = pq.distance_table(q)
+
+    indices = np.empty((k,), dtype=np.int64)
+    values = np.empty((k,), dtype=np.int32)
+    labels = np.arange(n, dtype=np.int64) + 10**12
+    init_heap(indices, values, True)
+    query_pq_sse(data, n, dtable.tables, indices, values, True, labels)
+    indices.sort()
+    np.testing.assert_array_equal(indices, labels)
 
