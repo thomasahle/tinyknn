@@ -1,4 +1,0 @@
-Cython
-numpy
-scikit-learn
-pytest

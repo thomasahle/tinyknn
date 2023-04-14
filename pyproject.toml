@@ -1,0 +1,32 @@
+[project]
+name = "fast_pq"
+version = "0.2"
+description = "Approximate Nearest Neighbors in Python."
+authors = [
+    {name="Thomas Dybdahl Ahle", email="lobais@gmail.com"}
+]
+license = {text = "AGPL-3.0-or-later"}
+#license-file = "LICENSE"
+readme = "README.md"
+keywords = ["nns", "approximate nearest neighbor search"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+   "Cython>=0.29",
+   "numpy>=1.24",
+   "pytest>=7.2",
+   "scikit-learn>=1.2",
+]
+
+[build-system]
+requires = ["setuptools", "wheel", "Cython"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+homepage = "https://github.com/thomasahle/fast_pq/"
