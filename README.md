@@ -46,11 +46,8 @@ This again can be attributed to the SSE instructions only allowing 4 bit table l
 We can use the `IVF` class to perform approximate nearest neighbor search with Inverted File Indexing.
 
 ```python
-from fast_pq import IVF, FastPQ
-
-ivf = IVF("euclidean", cl=100, pq=FastPQ(dims_per_block=2).fit(X))
-ivf.fit(X).build(X)
-
+from fast_pq import IVF
+ivf = IVF("euclidean", n_clusters=100).fit(X).build(X)
 neighbors = ivf.query(queries, k=10, n_probes=10)
 ```
 
