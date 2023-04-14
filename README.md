@@ -58,10 +58,10 @@ See also `examples/` for more detailed examples of usage.
 ## Installing
 
 You need to build `fast_pq` before you can run it, as it contains Cython code.
+The easiest way to do this is to simply run
 
 ```bash
-$ pip install -r requirements.txt
-$ python setup.py build_ext --inplace
+$ pip install .
 ```
 
 To test it we can run an example:
@@ -87,6 +87,11 @@ In this example Fast PQ is about 16 times faster than optmized scipy/numpy.
 The reason is that Fast PQ uses a trick called [Accelerated Nearest Neighbor Search with Qick ADC](https://dl.acm.org/doi/abs/10.1145/3078971.3078992)
 with which SIMD instructions are used to perform 16 inner product operations in a single instruction.
 
+### Developing
+If you are helping develop fast_pq, and need to test a change to the Cython code, you can rebuild it with
+```bash
+$ python setup.py build_ext --inplace
+```
 
 ## Class Overview
 
