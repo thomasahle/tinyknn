@@ -1,6 +1,6 @@
 import numpy as np
 import sklearn.cluster
-from fast_pq import bottom_k, bottom_k_2d
+from fast_pq import bottom_k, bottom_k_2d, FastPQ
 from ._fast_pq import query_pq_sse, init_heap
 import time
 from contextlib import contextmanager
@@ -43,21 +43,19 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
     Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
     between X and Y.
     """
-    nx = np.einsum("ij,ij->i", X, X)
-    ny = np.einsum("ij,ij->i", Y, Y)
-    res = np.zeros((nx.size, k))
-    if metric == "euclidean":
-        for i in range(0, nx.size, chunk):
-            part = nx[i : i + chunk, None] + ny - 2 * X[i : i + chunk] @ Y.T
-            res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
-    elif metric == "angular":
-        Xn = X / np.sqrt(nx[:, None])
-        Yn = Y / np.sqrt(ny[:, None])
-        for i in range(0, nx.size, chunk):
-            part = -2 * Xn[i : i + chunk] @ Yn.T
-            res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
-    else:
+    if metric == "angular":
+        X = X / np.linalg.norm(X, axis=1, keepdims=True)
+        Y = Y / np.linalg.norm(Y, axis=1, keepdims=True)
+    elif metric not in ["angular", "euclidean"]:
         raise ValueError(f"Metric not supported: {metric}")
+    n = X.shape[0]
+    res = np.zeros((n, k))
+    Ynorm2 = np.einsum("ij,ij->i", Y, Y)
+    for i in range(0, n, chunk):
+        Xchunk = X[i : i + chunk]
+        Xnorm2 = np.einsum("ij,ij->i", Xchunk, Xchunk)
+        part = Xnorm2[:, None] + Ynorm2[None] - 2 * Xchunk @ Y.T
+        res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
     return res
 
 
@@ -72,11 +70,11 @@ def brute1(x, Y, k):
 
 
 class IVF:
-    def __init__(self, metric, n_clusters, pq):
+    def __init__(self, metric, n_clusters, pq=None):
         assert metric in ["euclidean", "angular"]
         self.metric = metric
-        self.pq = pq
-        assert pq.centers is not None, "PQ should be pre-fitted"
+        self.pq = FastPQ(dims_per_block=2) if pq is None else pq
+        assert self.pq.centers is None, "PQ should not be pre-fitted"
         self.pq_transformed_points = [None] * n_clusters
         self.pq_transformed_centers = [None] * n_clusters
         self.n_clusters = n_clusters
@@ -106,10 +104,13 @@ class IVF:
             elif self.metric == "angular":
                 # For angular we use kmeans clustering, but normalize the norm of the centers
                 # as to make inner product equivalent to angular similarity.
-                X /= np.linalg.norm(X, axis=1, keepdims=True)
+                X = X / np.linalg.norm(X, axis=1, keepdims=True)
                 cl.fit(X)
                 self.all_centers = cl.cluster_centers_
                 self.all_centers /= np.linalg.norm(self.all_centers, axis=1, keepdims=True)
+
+        with timer(verbose, "Fitting PQ to data..."):
+            self.pq.fit(X, verbose=verbose)
 
         return self
 
@@ -132,7 +133,7 @@ class IVF:
             Returns the instance itself, with the index structure built and data points assigned to the nearest n_probes cluster centers.
         """
 
-        assert n_probes <= self.n_clusters
+        assert n_probes <= self.n_clusters, f"Can't assign points to {n_probes} clusters, as index only has {self.n_clusters}"
         self.data = data = X.copy()
 
         with timer(verbose, "Computing nearest clusters..."):
@@ -184,7 +185,7 @@ class IVF:
 
         return self
 
-    def query(self, q, k, n_probes=1):
+    def query(self, q, k, n_probes=1, pass_1=None):
         """
         Queries the data structure to find the top k closest elements to the given query vector q.
 
@@ -215,14 +216,10 @@ class IVF:
 
         # For the first pass, get 2k candidates from each cluster
         # One may experiment with tuning this. Could even make it an argument to query.
-        rescore = (n_probes + 1) * k + 1
-        indices = np.empty((rescore,), dtype=np.int64)
-        # We need a scratch space to store the approximate values,
-        # but we won't actually use it.
-        values = np.empty((rescore,), dtype=np.int32)
-        indices[:] = -1
-        values[:] = 127
-        #init_heap(indices, values, True)
+        if pass_1 is None:
+            pass_1 = (n_probes + 1) * k + 1
+        indices = np.full(pass_1, -1, dtype=np.int64)
+        values = np.full(pass_1, 127, dtype=np.int32)
 
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
@@ -230,12 +227,10 @@ class IVF:
                 transformed_data, true_n, dtable.tables, indices, values, True, labels=self.ids[cl]
             )
 
-        # Remove duplicates (only an issue if build_probes > 1)
-        indices = np.unique(indices)
-
-        # We may have gotten some heap padding elements mixed in
-        if indices.size != 0 and indices[0] == -1:
-            indices = indices[1:]
+        # We may have gotten some heap padding elements mixed in. This is very rarely an issue,
+        # so we check before we spend time building a mask and indexing.
+        if -1 in indices:
+            indices = indices[indices != -1]
 
         # If we have less or equal to k values, there's no point in rescoring
         if len(indices) <= k:

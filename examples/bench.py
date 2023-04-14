@@ -7,6 +7,7 @@ import os.path
 import sys
 import pickle
 import tqdm
+import re
 import sklearn.metrics
 
 from fast_pq import FastPQ, DummyPQ
@@ -33,12 +34,6 @@ parser.add_argument(
     help="Number of neighbours in k-NN search (default: 10)"
 )
 parser.add_argument(
-    "--query-method",
-    choices=["query", "query2", "query3"],
-    default="query",
-    help="Select the query method to use: query, query2, or query3 (default: query)"
-)
-parser.add_argument(
     "--metric",
     choices=["euclidean", "angular"],
     default="euclidean",
@@ -46,18 +41,27 @@ parser.add_argument(
 )
 args = parser.parse_args()
 
-num_queries, dims_per_block, k_neighbours = args.n_queries, args.dims_per_block, args.k_neighbours
+num_queries = args.n_queries
+dims_per_block = args.dims_per_block
+k_neighbours = args.k_neighbours
+simple_name = args.filename.split('/')[-1] if '/' in args.filename else args.filename
+
 print("Loading and shuffling...")
-data = np.load(args.filename)
-np.random.seed(10)
-np.random.shuffle(data)
+if match := re.match(r"random-(\w+)-(\d+)", args.filename):
+    size = {'xs': 10**5}[match.group(1)]
+    dim = int(match.group(2))
+    data = np.random.randn(10**5 + num_queries, dim)
+else:
+    data = np.load(args.filename)
+    np.random.seed(10)
+    np.random.shuffle(data)
 data, queries = data[:-num_queries], data[-num_queries:]
 
 num_points, num_dims = data.shape
 num_clusters = int(num_points**0.5)
 print(f"{num_points=}, {num_dims=}, {num_queries=}, {dims_per_block=}, {num_clusters=}")
 
-true_neighbours_filename = f"trus_{num_points}_{num_queries}_{args.metric}.npy"
+true_neighbours_filename = f"trus_{simple_name}_{num_points}_{num_queries}_{args.metric}.npy"
 if os.path.isfile(true_neighbours_filename):
     print("Loading true neighbours from", true_neighbours_filename)
     true_neighbours = np.load(true_neighbours_filename)
@@ -70,14 +74,14 @@ else:
     print(f"Took {time.time() - start:.1f} seconds.")
     np.save(true_neighbours_filename, true_neighbours)
 
-ivf_filename = f"ivf_{args.metric}_{num_points=}_{num_queries=}_{dims_per_block=}.pickle"
+ivf_filename = f"ivf_{simple_name}_{args.metric}_{num_points=}_{num_queries=}_{dims_per_block=}.pickle"
 if os.path.isfile(ivf_filename):
     print("Loading Index from", ivf_filename)
     with open(ivf_filename, "rb") as file:
         pq, ivf = pickle.load(file)
 else:
     print("Building Index...")
-    pq = FastPQ(dims_per_block=dims_per_block).fit(data)
+    pq = FastPQ(dims_per_block)
     ivf = IVF(args.metric, num_clusters, pq)
     start = time.time()
     ivf.fit(data, verbose=True)
@@ -87,6 +91,8 @@ else:
         pickle.dump((pq, ivf), file)
 
 print("Now that we have the index, actually add the points to it.")
+#ivf.build(data, n_probes=2, verbose=True)
+
 n_max_build_probes = 10
 for build_probes in range(1, n_max_build_probes):
     print(f"Adding each point to {build_probes} lists...")
@@ -95,11 +101,9 @@ for build_probes in range(1, n_max_build_probes):
     print(f"Took {time.time() - start:.1f} seconds.")
 
     print("Querying")
-    query_function = getattr(ivf, args.query_method)
     recall = 0
     n_probes = 1
     qpss, recalls = [], []
-    #while (build_probes == 1 and recall < .8) or (build_probes > 1 and recall < .9):
     while recall < .9:
         start = time.time()
         found = 0
@@ -107,7 +111,9 @@ for build_probes in range(1, n_max_build_probes):
         with tqdm.tqdm(enumerate(zip(queries, true_neighbours)), total=num_queries, leave=False) as pbar:
             pbar.set_description(f"Probing: {n_probes} out of {ivf.n_clusters} clusters")
             for i, (query, true_neighbor) in pbar:
-                guess = query_function(query, k=k_neighbours, n_probes=n_probes)
+                guess = ivf.query(query, k=k_neighbours, n_probes=n_probes)
+                # guess = ivf.query(query, k=k_neighbours, n_probes=n_probes,
+                #                        pass_1 = int((build_probes / 2) * n_probes * k_neighbours))
                 found += len(set(true_neighbor) & set(guess))
 
         qps = num_queries / (time.time() - start)

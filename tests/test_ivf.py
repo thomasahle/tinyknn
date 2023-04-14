@@ -28,13 +28,26 @@ def test_brute():
     assert np.all(np.sort(expected) == np.sort(best))
 
 
+def test_angular():
+    n1, n2, d = 40, 28, 5
+    np.random.seed(10)
+    X = np.random.randn(n1, d)
+    Y = np.random.randn(n2, d)
+    X /= np.linalg.norm(X, axis=1, keepdims=True)
+    Y /= np.linalg.norm(Y, axis=1, keepdims=True)
+    # Ordering between euclidean and angular is the same for normalized vectors
+    angular = brute(X, Y, 10, metric="angular")
+    euclidean = brute(X, Y, 10, metric="euclidean")
+    assert np.all(np.sort(angular) == np.sort(euclidean))
+
+
 def test_small_n():
     d = 10
     for metric in ["euclidean", "angular"]:
         for n in range(1, 5):
             X = np.random.randn(n, d).astype(np.float32)
             q = np.random.randn(d).astype(np.float32)
-            ivf = IVF(metric, 1, FastPQ(2).fit(X))
+            ivf = IVF(metric, 1, FastPQ(2))
             ivf.fit(X).build(X,n_probes=1)
             res = ivf.query(q, n)
             print(res)
@@ -48,7 +61,7 @@ def test_far_small_n():
             X = np.random.randn(n, d).astype(np.float32)
             X[0, :] = 10**5
             q = np.random.randn(d).astype(np.float32)
-            ivf = IVF(metric, 1, pq=FastPQ(2).fit(X))
+            ivf = IVF(metric, 1, pq=FastPQ(2))
             ivf.fit(X).build(X, n_probes=1)
             res = ivf.query(q, n)
             print(res)
@@ -78,7 +91,7 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
         trus = cdist(qs, X).argpartition(axis=1, kth=at)[:, :at]
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
-    ivf = IVF(metric, int(n**0.5), FastPQ(2).fit(X))
+    ivf = IVF(metric, int(n**0.5), FastPQ(2))
     ivf.fit(X).build(X)
     recall_at = 0
     for q, tru in zip(qs, trus):

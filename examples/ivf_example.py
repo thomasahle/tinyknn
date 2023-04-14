@@ -6,7 +6,7 @@ import sys
 import tqdm
 
 from fast_pq import FastPQ, DummyPQ
-from ivf import IVF, cdist, brute
+from fast_pq import IVF, cdist, brute
 
 
 parser = argparse.ArgumentParser()
@@ -52,9 +52,7 @@ if X.shape[0] > sub_size:
     subset = X[np.random.choice(X.shape[0], sub_size, replace=False)]
 else:
     subset = X
-pq = FastPQ(dims_per_block=dpb).fit(subset)
-# pq = DummyPQ()
-ivf = IVF("euclidean", cl, pq)
+ivf = IVF("euclidean", cl)
 ivf.fit(subset)
 ivf.build(X)
 
