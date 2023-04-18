@@ -8,9 +8,14 @@ from sklearn.exceptions import ConvergenceWarning
 from ._transform import transform_data, transform_tables
 from ._fast_pq import query_pq_sse, estimate_pq_sse, init_heap
 
+from numpy.core._methods import _amax, _mean
+
 warnings.simplefilter("error", category=ConvergenceWarning)
 
 TransformedData = namedtuple("TransformedData", "size packed")
+
+import os
+os.environ['NUMPY_EXPERIMENTAL_ARRAY_FUNCTION'] = '0'
 
 def pad1(arr, m):
     (s,) = arr.shape
@@ -53,6 +58,7 @@ class FastPQ:
         self.dims_per_block = dims_per_block
         self.centers = None  # Shape: (n_blocks, 16, dims_per_block)
         self.center_norms_sq = None  # Shape: (n_blocks, 16)
+        self.sqrt_n_blocks = None
 
     def fit(self, data, verbose=False):
         """
@@ -98,11 +104,13 @@ class FastPQ:
             # It doesn't give too much precision to do separate centers for each block,
             # but durnig queries we need seperate distance tables per block anyway, so
             # it doesn't cost us much.
+            # We .copy() the centers because we are reusing the KMeans object.
             centers.append(cl.cluster_centers_.copy())
             # Might as well grab the labels (transformed column) while we have it.
             transformed.append(cl.labels_[:, None])
-        self.centers = np.array(centers, dtype=np.float32)
-        self.center_norms_sq = np.linalg.norm(centers, axis=2) ** 2
+        # (d / dpb, 16, dpb) -> (16, d)
+        self.centers = np.array(centers, dtype=np.float32).transpose(1, 0, 2).reshape(16, d)
+        self.sqrt_n_blocks = np.sqrt(d // dpb)
 
         labels = np.hstack(transformed).astype(np.uint8)
         return TransformedData(true_n, transform_data(labels))
@@ -128,11 +136,11 @@ class FastPQ:
         data = pad2(data, 16, 2 * self.dims_per_block)
         n, d = data.shape
         assert n % 16 == 0
-        parts = data.reshape(n, -1, self.dims_per_block)
-        ips = np.einsum("ijk,jlk->ijl", parts, self.centers)  # Shape: (n, n_blocks, 16)
-        labels = np.argmin(self.center_norms_sq - 2 * ips, axis=2)
-        assert labels.shape == (n, d // self.dims_per_block)
-        labels = np.array(labels, dtype=np.uint8)
+        dpb = self.dims_per_block
+        blocks = d // dpb
+        dists = np.square(self.centers[None] - data[:, None]).reshape(n, 16, blocks, dpb).sum(axis=-1)
+        labels = np.argmin(dists, axis=1).astype(np.uint8)
+        assert labels.shape == (n, blocks)
         return TransformedData(true_n, transform_data(labels))
 
     def distance_table(self, q):
@@ -149,28 +157,25 @@ class FastPQ:
         _FastDistanceTable
             The FastDistanceTable object containing the computed distance table.
         """
-        q = pad1(q, 2 * self.dims_per_block)
         dpb = self.dims_per_block
-        n_blocks = q.size / dpb
+        q = pad1(q, 2 * dpb)
 
-        parts = q.reshape(-1, dpb)
-
-        # Center the data in the range [-128, 128]
-        dists = self.center_norms_sq - 2 * np.einsum("ijk,ik->ij", self.centers, parts)
+        diff = (self.centers - q).reshape(16, -1, dpb)
+        dists = np.einsum('ijk,ijk->ij', diff, diff)
 
         # We do this by shifting by the mean value and scaling by the nuber of blocks.
         # The idea is that we don't want to have an overflow as we add together
-        # distances in uint8 format.
-        # The median also works well here, maybe even a bit better, but it takes longer to compute.
-        shift = np.median(dists)
-        scale = 128 / (np.max(np.abs(dists - shift)) * np.sqrt(n_blocks))
-
-        # Round to nearest integer towards zero.
-        table = np.round((dists - shift) * scale)
+        # distances in uint8 format. The median seems to work better here than the mean,
+        # even though it's a bit more expensive to compute. It turns out the squared distances
+        # are roughly exponentially distributed, so the median is ~ mean * log(2).
+        shift = _mean(dists) * 0.6931471806
+        dists -= shift
+        scale = 128 / (_amax(dists) * self.sqrt_n_blocks)
+        table = np.round(dists * scale)
 
         # The transformation doesn't care about the sign, so we just use uint
         table = table.astype(np.uint8)
-        trans = transform_tables(table)
+        trans = transform_tables(table.T)
         return _FastDistanceTable(q, trans, shift, scale, signed=True)
 
     def udistance_table(self, q):
@@ -188,17 +193,16 @@ class FastPQ:
         _FastDistanceTable
             The FastDistanceTable object containing the computed unsigned distance table.
         """
-        q = pad1(q, 2 * self.dims_per_block)
         dpb = self.dims_per_block
-        n_blocks = q.size / dpb
-        parts = q.reshape(-1, dpb)
-        dists = self.center_norms_sq - 2 * np.einsum("ijk,ik->ij", self.centers, parts)
+        q = pad1(q, 2 * dpb)
+        n_blocks = q.size // dpb
+        dists = np.square(self.centers - q).reshape(16, n_blocks, dpb).sum(axis=-1)
         shift = np.min(dists)
         dists -= shift
-        scale = 255 / (np.max(dists) * np.sqrt(n_blocks))
-        table *= scale
+        scale = 255 / (np.max(dists) * np.log(n_blocks) * np.sqrt(n_blocks))
+        table = np.round(dists * scale)
         table = table.astype(np.uint8)
-        trans = transform_tables(table)
+        trans = transform_tables(table.T)
         return _FastDistanceTable(q, trans, shift, scale, signed=False)
 
 
@@ -220,7 +224,7 @@ class _FastDistanceTable:
         true_n, transformed_data = transformed_data
         if out is None:
             out = np.zeros(2 * len(transformed_data), dtype=np.uint64)
-        estimate_pq_sse(transformed_data, self.tables, out, True)
+        estimate_pq_sse(transformed_data, self.tables, out, self.signed)
         res = out.view(np.int8)
         res = res[:true_n]  # Trim padding elements
         if not rescale:
@@ -246,8 +250,8 @@ class _FastDistanceTable:
 
         indices = np.zeros((rescore,), dtype=np.int64)
         values = np.zeros((rescore,), dtype=np.int32)
-        init_heap(indices, values, True)
-        query_pq_sse(transformed_data, true_n, self.tables, indices, values, True)
+        init_heap(indices, values, self.signed)
+        query_pq_sse(transformed_data, true_n, self.tables, indices, values, self.signed)
 
         # In a second pass we compute the true distances and return the actually
         # closest points. If we got fewer or exactly k outputs, there is no need
