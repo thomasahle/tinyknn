@@ -15,7 +15,9 @@ warnings.simplefilter("error", category=ConvergenceWarning)
 TransformedData = namedtuple("TransformedData", "size packed")
 
 import os
-os.environ['NUMPY_EXPERIMENTAL_ARRAY_FUNCTION'] = '0'
+
+os.environ["NUMPY_EXPERIMENTAL_ARRAY_FUNCTION"] = "0"
+
 
 def pad1(arr, m):
     (s,) = arr.shape
@@ -57,7 +59,6 @@ class FastPQ:
         """
         self.dims_per_block = dims_per_block
         self.centers = None  # Shape: (n_blocks, 16, dims_per_block)
-        self.center_norms_sq = None  # Shape: (n_blocks, 16)
         self.sqrt_n_blocks = None
 
     def fit(self, data, verbose=False):
@@ -109,7 +110,9 @@ class FastPQ:
             # Might as well grab the labels (transformed column) while we have it.
             transformed.append(cl.labels_[:, None])
         # (d / dpb, 16, dpb) -> (16, d)
-        self.centers = np.array(centers, dtype=np.float32).transpose(1, 0, 2).reshape(16, d)
+        self.centers = (
+            np.array(centers, dtype=np.float32).transpose(1, 0, 2).reshape(16, d)
+        )
         self.sqrt_n_blocks = np.sqrt(d // dpb)
 
         labels = np.hstack(transformed).astype(np.uint8)
@@ -138,7 +141,11 @@ class FastPQ:
         assert n % 16 == 0
         dpb = self.dims_per_block
         blocks = d // dpb
-        dists = np.square(self.centers[None] - data[:, None]).reshape(n, 16, blocks, dpb).sum(axis=-1)
+        dists = (
+            np.square(self.centers[None] - data[:, None])
+            .reshape(n, 16, blocks, dpb)
+            .sum(axis=-1)
+        )
         labels = np.argmin(dists, axis=1).astype(np.uint8)
         assert labels.shape == (n, blocks)
         return TransformedData(true_n, transform_data(labels))
@@ -161,7 +168,7 @@ class FastPQ:
         q = pad1(q, 2 * dpb)
 
         diff = (self.centers - q).reshape(16, -1, dpb)
-        dists = np.einsum('ijk,ijk->ij', diff, diff)
+        dists = np.einsum("ijk,ijk->ij", diff, diff)
 
         # We do this by shifting by the mean value and scaling by the nuber of blocks.
         # The idea is that we don't want to have an overflow as we add together
@@ -228,7 +235,6 @@ class _FastDistanceTable:
         res = out.view(np.int8)
         res = res[:true_n]  # Trim padding elements
         if not rescale:
-            # TODO: Would sorting actually be faster if we casted to float?
             return res
         # The center_norm is already built into res, so we just need to add
         # the norm of q and rescale.
@@ -251,7 +257,9 @@ class _FastDistanceTable:
         indices = np.zeros((rescore,), dtype=np.int64)
         values = np.zeros((rescore,), dtype=np.int32)
         init_heap(indices, values, self.signed)
-        query_pq_sse(transformed_data, true_n, self.tables, indices, values, self.signed)
+        query_pq_sse(
+            transformed_data, true_n, self.tables, indices, values, self.signed
+        )
 
         # In a second pass we compute the true distances and return the actually
         # closest points. If we got fewer or exactly k outputs, there is no need

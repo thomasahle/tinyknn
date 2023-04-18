@@ -107,7 +107,9 @@ class IVF:
                 X = X / np.linalg.norm(X, axis=1, keepdims=True)
                 cl.fit(X)
                 self.all_centers = cl.cluster_centers_
-                self.all_centers /= np.linalg.norm(self.all_centers, axis=1, keepdims=True)
+                self.all_centers /= np.linalg.norm(
+                    self.all_centers, axis=1, keepdims=True
+                )
 
         with timer(verbose, "Fitting PQ to data..."):
             self.pq.fit(X, verbose=verbose)
@@ -133,11 +135,13 @@ class IVF:
             Returns the instance itself, with the index structure built and data points assigned to the nearest n_probes cluster centers.
         """
 
-        assert n_probes <= self.n_clusters, f"Can't assign points to {n_probes} clusters, as index only has {self.n_clusters}"
+        assert (
+            n_probes <= self.n_clusters
+        ), f"Can't assign points to {n_probes} clusters, as index only has {self.n_clusters}"
         self.data = data = X.copy()
 
         with timer(verbose, "Computing nearest clusters..."):
-            # TODO: Use compression here, somehow.
+            # TODO: Use the compression here, somehow.
 
             if self.metric == "euclidean":
                 distances = cdist(data, self.all_centers)
@@ -157,7 +161,9 @@ class IVF:
             self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
         t0, t1, t2 = 0, 0, 0
-        with timer(verbose, "Transforming points and adding them to their nearest centers..."):
+        with timer(
+            verbose, "Transforming points and adding them to their nearest centers..."
+        ):
             for i in range(self.active_centers.shape[0]):
                 # TODO: This is a lot slower than it needs to be.
                 s = time.time()
@@ -224,7 +230,13 @@ class IVF:
         for i, cl in enumerate(top):
             true_n, transformed_data = self.pq_transformed_points[cl]
             query_pq_sse(
-                transformed_data, true_n, dtable.tables, indices, values, True, labels=self.ids[cl]
+                transformed_data,
+                true_n,
+                dtable.tables,
+                indices,
+                values,
+                True,
+                labels=self.ids[cl],
             )
 
         # We may have gotten some heap padding elements mixed in. This is very rarely an issue,

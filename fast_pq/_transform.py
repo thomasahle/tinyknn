@@ -70,10 +70,10 @@ def transform_data(data0):
     data = data0.reshape(n // 16, 16, d)
     data = data.transpose(0, 2, 1)
     # Interleave rows two by two
-    data = (                                     # [0,1,2,3,4,5,6,7]
-        data.reshape(n // 16, d // 2, 2, 16)     # [0,1,2,3], [4,5,6,7]
-        .reshape(n // 16, d // 2, 32, order="F") # [0,4,1,5,2,6,3,7]
-        .reshape(n // 16, d, 16)                 # [0,4,1,5], [2,6,3,7]
+    data = (  # [0,1,2,3,4,5,6,7]
+        data.reshape(n // 16, d // 2, 2, 16)  # [0,1,2,3], [4,5,6,7]
+        .reshape(n // 16, d // 2, 32, order="F")  # [0,4,1,5,2,6,3,7]
+        .reshape(n // 16, d, 16)  # [0,4,1,5], [2,6,3,7]
     )
     # Reversing last dimension for endianess
     data = data[:, :, ::-1]
@@ -131,10 +131,10 @@ def unpack(transformed_data):
     shifts = np.arange(15, -1, -1, dtype=np.uint64) * 4
     data = (transformed_data[..., np.newaxis] >> shifts) & 0xF
 
-    data = data[:, :, ::-1]                               # [0,4,1,5], [2,6,3,7]
-    data = data.reshape(chunks, d // 2, 32)               # [0,4,1,5,2,6,3,7]
-    data = data.reshape(chunks, d // 2, 2, 16, order='F') # [0,1,2,3], [4,5,6,7]
-    data = data.reshape(chunks, d, 16)                    # [0,1,2,3], [4,5,6,7]
+    data = data[:, :, ::-1]  # [0,4,1,5], [2,6,3,7]
+    data = data.reshape(chunks, d // 2, 32)  # [0,4,1,5,2,6,3,7]
+    data = data.reshape(chunks, d // 2, 2, 16, order="F")  # [0,1,2,3], [4,5,6,7]
+    data = data.reshape(chunks, d, 16)  # [0,1,2,3], [4,5,6,7]
 
     data = data.transpose(0, 2, 1)
     data = data.reshape(n, d)

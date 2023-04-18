@@ -7,6 +7,7 @@ np.random.seed(10)
 from fast_pq._fast_pq import estimate_pq_sse
 from fast_pq._fast_pq import insert, init_heap
 
+
 class Heap:
     def __init__(self, size):
         self.indices = np.empty((size,), dtype=np.int64)
@@ -57,7 +58,7 @@ def test_random():
         top_pyheap = -pyheap[0][0]
         assert top_pyheap == heap.peek()
 
-        v = np.random.randint(10000 // (t+1))
+        v = np.random.randint(10000 // (t + 1))
         heap.insert(t, v)
         if v < top_pyheap:
             heapq.heappop(pyheap)

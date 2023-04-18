@@ -13,8 +13,12 @@ import sklearn.metrics
 from fast_pq import FastPQ, DummyPQ
 from fast_pq import IVF, cdist, brute
 
-parser = argparse.ArgumentParser(description="Benchmark FastPQ and IVF on GloVe dataset")
-parser.add_argument("filename", help="Path to the GloVe .npy file (e.g., glove.840B.100d.npy)")
+parser = argparse.ArgumentParser(
+    description="Benchmark FastPQ and IVF on GloVe dataset"
+)
+parser.add_argument(
+    "filename", help="Path to the GloVe .npy file (e.g., glove.840B.100d.npy)"
+)
 parser.add_argument(
     "--n-queries",
     type=int,
@@ -31,24 +35,24 @@ parser.add_argument(
     "--k-neighbours",
     type=int,
     default=10,
-    help="Number of neighbours in k-NN search (default: 10)"
+    help="Number of neighbours in k-NN search (default: 10)",
 )
 parser.add_argument(
     "--metric",
     choices=["euclidean", "angular"],
     default="euclidean",
-    help="Metric to use in IVF. Can be 'euclidean' or 'angular'. Default is 'euclidean'."
+    help="Metric to use in IVF. Can be 'euclidean' or 'angular'. Default is 'euclidean'.",
 )
 args = parser.parse_args()
 
 num_queries = args.n_queries
 dims_per_block = args.dims_per_block
 k_neighbours = args.k_neighbours
-simple_name = args.filename.split('/')[-1] if '/' in args.filename else args.filename
+simple_name = args.filename.split("/")[-1] if "/" in args.filename else args.filename
 
 print("Loading and shuffling...")
 if match := re.match(r"random-(\w+)-(\d+)", args.filename):
-    size = {'xs': 10**5}[match.group(1)]
+    size = {"xs": 10**5}[match.group(1)]
     dim = int(match.group(2))
     data = np.random.randn(10**5 + num_queries, dim)
 else:
@@ -61,7 +65,9 @@ num_points, num_dims = data.shape
 num_clusters = int(num_points**0.5)
 print(f"{num_points=}, {num_dims=}, {num_queries=}, {dims_per_block=}, {num_clusters=}")
 
-true_neighbours_filename = f"trus_{simple_name}_{num_points}_{num_queries}_{args.metric}.npy"
+true_neighbours_filename = (
+    f"trus_{simple_name}_{num_points}_{num_queries}_{args.metric}.npy"
+)
 if os.path.isfile(true_neighbours_filename):
     print("Loading true neighbours from", true_neighbours_filename)
     true_neighbours = np.load(true_neighbours_filename)
@@ -91,7 +97,7 @@ else:
         pickle.dump((pq, ivf), file)
 
 print("Now that we have the index, actually add the points to it.")
-#ivf.build(data, n_probes=2, verbose=True)
+# ivf.build(data, n_probes=2, verbose=True)
 
 n_max_build_probes = 10
 for build_probes in range(1, n_max_build_probes):
@@ -104,12 +110,16 @@ for build_probes in range(1, n_max_build_probes):
     recall = 0
     n_probes = 1
     qpss, recalls = [], []
-    while recall < .9:
+    while recall < 0.9:
         start = time.time()
         found = 0
 
-        with tqdm.tqdm(enumerate(zip(queries, true_neighbours)), total=num_queries, leave=False) as pbar:
-            pbar.set_description(f"Probing: {n_probes} out of {ivf.n_clusters} clusters")
+        with tqdm.tqdm(
+            enumerate(zip(queries, true_neighbours)), total=num_queries, leave=False
+        ) as pbar:
+            pbar.set_description(
+                f"Probing: {n_probes} out of {ivf.n_clusters} clusters"
+            )
             for i, (query, true_neighbor) in pbar:
                 guess = ivf.query(query, k=k_neighbours, n_probes=n_probes)
                 # guess = ivf.query(query, k=k_neighbours, n_probes=n_probes,
@@ -124,14 +134,13 @@ for build_probes in range(1, n_max_build_probes):
         print(f"Recall{k_neighbours}@{k_neighbours}:", recall)
         print("Queries/second:", qps)
 
-        n_probes += int(n_probes**.5)
+        n_probes += int(n_probes**0.5)
 
     # We compute the area under the curve, but only for recall in [1/2, 1]
     qpss.append(0)
     recalls.append(1)
-    recall0 = 1/2
+    recall0 = 1 / 2
     qps0 = np.interp(recall0, recalls, qpss)
     i = np.searchsorted(recalls, recall0)
     auc = sklearn.metrics.auc([recall0] + recalls[i:], [qps0] + qpss[i:])
     print(f"Area under the curve from {recall0} to 1: {auc:.1f}")
-

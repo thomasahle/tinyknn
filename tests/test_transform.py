@@ -30,7 +30,9 @@ def _test_rand_inner_unsigned(n, d):
     tab = [[random.randrange(256 // d * 2) for _ in range(16)] for _ in range(d)]
     expected = np.array([sum(tab[j][dat[i][j]] for j in range(d)) for i in range(n)])
     expected = np.minimum(expected, 255)
-    out = _slow_pq(np.array(dat).astype(np.uint8), np.array(tab).astype(np.uint8), False)
+    out = _slow_pq(
+        np.array(dat).astype(np.uint8), np.array(tab).astype(np.uint8), False
+    )
     assert np.all(expected == out)
 
 
@@ -73,4 +75,3 @@ def test_unpack():
     t_data = transform_data(data)
     data1 = unpack(t_data)
     np.testing.assert_array_equal(data, data1)
-

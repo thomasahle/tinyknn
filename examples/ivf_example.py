@@ -10,7 +10,7 @@ from fast_pq import IVF, cdist, brute
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--filename", default='random', help="Path to glove.6B.100d.npy")
+parser.add_argument("--filename", default="random", help="Path to glove.6B.100d.npy")
 parser.add_argument(
     "--n-queries", type=int, default=10000, help="Number of random queries to run"
 )
@@ -24,7 +24,7 @@ args = parser.parse_args()
 
 k, dpb = args.n_queries, args.dims_per_block
 print("Sampling")
-if args.filename == 'random':
+if args.filename == "random":
     X = np.random.randn(20000, 100)
 else:
     X = np.load(args.filename)

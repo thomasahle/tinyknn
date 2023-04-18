@@ -8,7 +8,9 @@ from fast_pq import FastPQ, cdist
 np.random.seed(10)
 
 
-@pytest.mark.parametrize("i, method, signed", product(range(1, 5), ["argpartition", "top"], [True, False]))
+@pytest.mark.parametrize(
+    "i, method, signed", product(range(1, 5), ["argpartition", "top"], [True, False])
+)
 def test_recall(i, method, signed):
     n = np.random.randint(16 * i, 16 * (i + 1))
     _test_recall_inner(n, 8 * i, 100, 2, method, signed)
@@ -35,10 +37,9 @@ def _test_recall_inner(n, d, k, dpb, method, signed):
 
 
 @pytest.mark.filterwarnings("ignore:Number of distinct clusters")
-@pytest.mark.parametrize("n, dpb, signed", product(
-    tuple(range(1, 10)) + (20, 30, 50),
-    [1, 2],
-    [True, False]))
+@pytest.mark.parametrize(
+    "n, dpb, signed", product(tuple(range(1, 10)) + (20, 30, 50), [1, 2], [True, False])
+)
 def test_topk(n, dpb, signed):
     _test_topk_inner(n, 3, 11, dpb, signed)
 
@@ -73,7 +74,7 @@ def _test_topk_inner(n, m, d, dpb, signed):
         out = np.zeros(2 * len(data), dtype=np.uint64)
         estimate_pq_sse(data, dtable.tables, out, signed)
         est = out.view(np.int8 if signed else np.uint8)
-        est = est[:n] # Remove padding
+        est = est[:n]  # Remove padding
 
         k = n
         indices = np.zeros((k,), dtype=np.int64)
@@ -109,4 +110,3 @@ def test_large_labels():
     query_pq_sse(data, n, dtable.tables, indices, values, True, labels)
     indices.sort()
     np.testing.assert_array_equal(indices, labels)
-

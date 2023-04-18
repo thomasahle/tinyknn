@@ -48,7 +48,7 @@ def test_small_n():
             X = np.random.randn(n, d).astype(np.float32)
             q = np.random.randn(d).astype(np.float32)
             ivf = IVF(metric, 1, FastPQ(2))
-            ivf.fit(X).build(X,n_probes=1)
+            ivf.fit(X).build(X, n_probes=1)
             res = ivf.query(q, n)
             print(res)
             assert all(0 <= i < n for i in res)

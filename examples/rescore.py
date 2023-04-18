@@ -19,6 +19,7 @@ ivf.fit(X).build(X, n_probes=2)
 qs = np.random.randn(nq, d).astype(np.float32)
 trus = cdist(qs, X).argpartition(axis=1, kth=at)[:, :at]
 
+
 def compute_recall(pass_1, query_probes):
     start = time.time()
     recall_at = 0
@@ -29,18 +30,19 @@ def compute_recall(pass_1, query_probes):
 
     return recall_at / nq / at, elasped
 
+
 # Print header row
 print(f"Recall {at}@{at} using pass_1=p and query_probes=q.")
-print("p/q", end=' ')
-for query_probes in range(1, max_probes+1):
-    print(f"{query_probes:5}", end=' ')
+print("p/q", end=" ")
+for query_probes in range(1, max_probes + 1):
+    print(f"{query_probes:5}", end=" ")
 print()
 
 # Print table content
 total_query_time = 0
-for pass_1 in range(1, max_probes+1):
-    print(f"{pass_1:4}", end=' ')
-    for query_probes in range(1, max_probes+1):
+for pass_1 in range(1, max_probes + 1):
+    print(f"{pass_1:4}", end=" ")
+    for query_probes in range(1, max_probes + 1):
         recall, query_time = compute_recall(pass_1 * at, query_probes)
         total_query_time += query_time
         print(f"{recall:.2f}", end=", ")
