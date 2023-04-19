@@ -43,11 +43,18 @@ parser.add_argument(
     default="euclidean",
     help="Metric to use in IVF. Can be 'euclidean' or 'angular'. Default is 'euclidean'.",
 )
+parser.add_argument(
+    "--a",
+    type=float,
+    default=1.0,
+    help="Number of clusters will be int(a * sqrt(n))",
+)
 args = parser.parse_args()
 
 num_queries = args.n_queries
 dims_per_block = args.dims_per_block
 k_neighbours = args.k_neighbours
+metric = args.metric
 simple_name = args.filename.split("/")[-1] if "/" in args.filename else args.filename
 
 print("Loading and shuffling...")
@@ -62,11 +69,11 @@ else:
 data, queries = data[:-num_queries], data[-num_queries:]
 
 num_points, num_dims = data.shape
-num_clusters = int(num_points**0.5)
+num_clusters = int(args.a * num_points**0.5)
 print(f"{num_points=}, {num_dims=}, {num_queries=}, {dims_per_block=}, {num_clusters=}")
 
 true_neighbours_filename = (
-    f"trus_{simple_name}_{num_points}_{num_queries}_{args.metric}.npy"
+    f"trus_{simple_name}_{k_neighbours=}_{num_queries=}_{metric=}.npy"
 )
 if os.path.isfile(true_neighbours_filename):
     print("Loading true neighbours from", true_neighbours_filename)
@@ -80,7 +87,7 @@ else:
     print(f"Took {time.time() - start:.1f} seconds.")
     np.save(true_neighbours_filename, true_neighbours)
 
-ivf_filename = f"ivf_{simple_name}_{args.metric}_{num_points=}_{num_queries=}_{dims_per_block=}.pickle"
+ivf_filename = f"ivf_{simple_name}_{args.metric}_{num_clusters=}_{dims_per_block=}.pickle"
 if os.path.isfile(ivf_filename):
     print("Loading Index from", ivf_filename)
     with open(ivf_filename, "rb") as file:
