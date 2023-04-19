@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 
 from fast_pq import FastPQ, DummyPQ
-from fast_pq import IVF, cdist, brute
+from fast_pq import IVF, cdist, brute, group_data_by_indices
 
 
 def test_cdist():
@@ -104,3 +104,28 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
 def test_small():
     np.random.seed(10)
     assert _test_recall_inner(15, 10, 30, 2, 10, "euclidean", 1) > 0.05
+
+
+def test_group_data_by_indices():
+    N, d, c, k = 100, 5, 6, 3
+    X = np.random.rand(N, d)
+    Q = np.random.randn(c, d)
+    indices = np.argpartition(-X @ Q.T, k, axis=1)[:, :k]
+
+    # Using the group_data_by_indices function
+    parts, _ = group_data_by_indices(X, indices, c)
+
+    # Using the alternative method with masks
+    mask_parts = []
+    for i in range(c):
+        mask = np.any(indices == i, axis=1)
+        mask_parts.append(X[mask])
+
+    # Compare the results
+    for i in range(c):
+        # Sort so we can compare
+        A = parts[i]
+        sorted_A = A[np.lexsort(A.T), :]
+        B = mask_parts[i]
+        sorted_B = B[np.lexsort(B.T), :]
+        np.testing.assert_allclose(sorted_A, sorted_B)

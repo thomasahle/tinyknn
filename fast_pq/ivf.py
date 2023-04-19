@@ -69,6 +69,50 @@ def brute1(x, Y, k):
     return dists.argpartition(kth=k)[:k]
 
 
+def group_data_by_indices(X, indices, k):
+    """
+    Given a 2D array `X` of shape (N, d), a 2D array `indices` of shape (N, c) with integers in [0, k),
+    and an integer `k`, return a list `parts` of k arrays, such that all rows X[i] are in parts[indices[i, j]] for some j.
+
+    Args:
+    X (np.ndarray): A 2D numpy array of shape (N, d) containing the data points.
+    indices (np.ndarray): A 2D numpy array of shape (N, c) containing integers in the range [0, k).
+    k (int): The number of groups.
+
+    Returns:
+    list: A list of k numpy arrays, where each array contains the rows of X that belong to the corresponding group.
+    """
+    # Initialize an empty list to store the data points for each group
+    assert 0 <= np.min(indices) and np.max(indices) < k
+    parts = [[] for _ in range(k)]
+    ids = [[] for _ in range(k)]
+
+    # Iterate over each column in indices
+    for i in range(indices.shape[1]):
+        # Get the current column of indices
+        col = indices[:, i]
+
+        # Sort X by the current column of indices
+        sorted_indices = np.argsort(col)
+        sorted_X = X[sorted_indices]
+
+        # Compute the length of the runs in the current column of indices (sorted)
+        sorted_indices_unique, run_lengths = np.unique(
+            col[sorted_indices], return_counts=True
+        )
+        # Use a loop only over j = 0 to k - 1 that selects the runs of X and adds them to the corresponding group in parts
+        start = 0
+        for i, run_length in enumerate(run_lengths):
+            end = start + run_length
+            parts[sorted_indices_unique[i]].append(sorted_X[start:end])
+            ids[sorted_indices_unique[i]].append(sorted_indices[start:end])
+            start = end
+
+    parts = [np.vstack(part) for part in parts]
+    ids = [np.hstack(id_list) for id_list in ids]
+    return parts, ids
+
+
 class IVF:
     def __init__(self, metric, n_clusters, pq=None):
         assert metric in ["euclidean", "angular"]
@@ -160,34 +204,12 @@ class IVF:
             )
             self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
-        t0, t1, t2 = 0, 0, 0
-        with timer(
-            verbose, "Transforming points and adding them to their nearest centers..."
-        ):
+        with timer(verbose, "Transforming points..."):
+            groups, self.ids = group_data_by_indices(
+                data, nearest_indices, self.active_centers.shape[0]
+            )
             for i in range(self.active_centers.shape[0]):
-                # TODO: This is a lot slower than it needs to be.
-                s = time.time()
-                mask = np.any(nearest_indices == i, axis=1)
-                t0 += time.time() - s
-
-                # TODO: We should be able to extract the relevant data
-                # directly from a previously transformed X.
-                # However, that would require slicing into the compressed QuickADC format,
-                # which is annoying.
-                s = time.time()
-                self.pq_transformed_points[i] = self.pq.transform(
-                    np.ascontiguousarray(data[mask])
-                )
-                t1 += time.time() - s
-
-                s = time.time()
-                self.ids[i] = np.arange(data.shape[0], dtype=np.int64)[mask]
-                t2 += time.time() - s
-
-        if verbose:
-            print(f"Finding any: {t0:.1f}")
-            print(f"Transforming: {t1:.1f}")
-            print(f"Computing ids: {t2:.1f}")
+                self.pq_transformed_points[i] = self.pq.transform(groups[i])
 
         return self
 
