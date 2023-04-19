@@ -9,19 +9,20 @@ np.random.seed(10)
 
 
 @pytest.mark.parametrize(
-    "i, method, signed", product(range(1, 5), ["argpartition", "top"], [True, False])
+    "i, method, signed, use_kmeans",
+    product(range(1, 5), ["argpartition", "top"], [True, False], [True, False]),
 )
-def test_recall(i, method, signed):
+def test_recall(i, method, signed, use_kmeans):
     n = np.random.randint(16 * i, 16 * (i + 1))
-    _test_recall_inner(n, 8 * i, 100, 2, method, signed)
+    _test_recall_inner(n, 8 * i, 100, 2, method, signed, use_kmeans)
 
 
-def _test_recall_inner(n, d, k, dpb, method, signed):
+def _test_recall_inner(n, d, k, dpb, method, signed, use_kmeans):
     X = np.random.randn(n, d).astype(np.float32)
     qs = np.random.randn(k, d).astype(np.float32)
     trus = cdist(qs, X).argmin(axis=1)
 
-    pq = FastPQ(dims_per_block=dpb)
+    pq = FastPQ(dims_per_block=dpb, use_kmeans=use_kmeans)
     data = pq.fit_transform(X)
     recall_at_10 = 0
     for q, tru in zip(qs, trus):
@@ -29,7 +30,7 @@ def _test_recall_inner(n, d, k, dpb, method, signed):
         if method == "argpartition":
             top10 = dtable.estimate_distances(data).argpartition(10)[:10]
         elif method == "top":
-            top10, _ = dtable.top(data, X, 10)
+            top10 = dtable.top(data, X, 10)
         if tru in top10:
             recall_at_10 += 1
     recall_at_10 /= k

@@ -1,72 +1,8 @@
 import numpy as np
 import sklearn.cluster
-from fast_pq import bottom_k, bottom_k_2d, FastPQ
+from fast_pq import FastPQ
+from .utils import bottom_k, bottom_k_2d, cdist, timer, brute1
 from ._fast_pq import query_pq_sse, init_heap
-import time
-from contextlib import contextmanager
-
-
-@contextmanager
-def timer(verbose, text):
-    if verbose:
-        print(text)
-        start = time.time()
-    yield
-    if verbose:
-        print(f"Took {time.time() - start:.1f}s")
-
-
-def cdist(X, Y, chunk=100):
-    """
-    Computes the squared Euclidean distances between two sets of points X and Y.
-    Returns R st. R[i,j] = dist(X_i, Y_j)^2.
-    Equivalent to scipy.spatial.distance.cdist.
-    """
-    # This is how sklearn computes row norms. It
-    # %timeit np.linalg.norm(x, axis=1)
-    # 486 ms ± 6.33 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-    # %timeit np.einsum('ij,ij->i',x,x)
-    # 62.9 ms ± 2.35 ms per loop (mean ± std. dev. of 7 runs, 10 loops each)
-    # %timeit (x*x).sum(axis=1)
-    # 495 ms ± 6.71 ms per loop (mean ± std. dev. of 7 runs, 1 loop each)
-    nx = np.einsum("ij,ij->i", X, X)
-    ny = np.einsum("ij,ij->i", Y, Y)
-    res = np.zeros((nx.size, ny.size))
-    for i in range(0, nx.size, chunk):
-        res[i : i + chunk] = nx[i : i + chunk, None] + ny
-        res[i : i + chunk] -= 2 * X[i : i + chunk] @ Y.T
-    return res
-
-
-def brute(X, Y, k, metric="euclidean", chunk=100):
-    """
-    Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
-    between X and Y.
-    """
-    if metric == "angular":
-        X = X / np.linalg.norm(X, axis=1, keepdims=True)
-        Y = Y / np.linalg.norm(Y, axis=1, keepdims=True)
-    elif metric not in ["angular", "euclidean"]:
-        raise ValueError(f"Metric not supported: {metric}")
-    n = X.shape[0]
-    res = np.zeros((n, k))
-    Ynorm2 = np.einsum("ij,ij->i", Y, Y)
-    for i in range(0, n, chunk):
-        Xchunk = X[i : i + chunk]
-        Xnorm2 = np.einsum("ij,ij->i", Xchunk, Xchunk)
-        part = Xnorm2[:, None] + Ynorm2[None] - 2 * Xchunk @ Y.T
-        res[i : i + chunk] = part.argpartition(axis=1, kth=k)[:, :k]
-    return res
-
-
-def brute1(x, Y, k):
-    """
-    Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
-    between X and Y.
-    """
-    diff = Y - x
-    dists = np.einsum("ij,ij->i", diff, diff)
-    return dists.argpartition(kth=k)[:k]
 
 
 def group_data_by_indices(X, indices, k):
@@ -238,9 +174,7 @@ class IVF:
         dtable = self.pq.distance_table(q)
 
         # Find best centers
-        top, _ = dtable.top(
-            self.pq_transformed_centers, self.active_centers, k=n_probes
-        )
+        top = dtable.top(self.pq_transformed_centers, self.active_centers, k=n_probes)
 
         # For the first pass, get 2k candidates from each cluster
         # One may experiment with tuning this. Could even make it an argument to query.
@@ -270,8 +204,6 @@ class IVF:
         if len(indices) <= k:
             return indices
 
-        q = q[: self.data.shape[1]]  # Remove padding from q
-        diff = self.data[indices] - q
-        dists = np.einsum("ij,ij->i", diff, diff)
-        best = bottom_k(dists, k=k)
+        unpadded_q = q[: self.data.shape[1]]
+        best = brute1(unpadded_q, self.data[indices], k)
         return indices[best]

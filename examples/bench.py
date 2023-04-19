@@ -87,7 +87,9 @@ else:
     print(f"Took {time.time() - start:.1f} seconds.")
     np.save(true_neighbours_filename, true_neighbours)
 
-ivf_filename = f"ivf_{simple_name}_{args.metric}_{num_clusters=}_{dims_per_block=}.pickle"
+ivf_filename = (
+    f"ivf_{simple_name}_{args.metric}_{num_clusters=}_{dims_per_block=}.pickle"
+)
 if os.path.isfile(ivf_filename):
     print("Loading Index from", ivf_filename)
     with open(ivf_filename, "rb") as file:

@@ -7,6 +7,7 @@ from sklearn.exceptions import ConvergenceWarning
 
 from ._transform import transform_data, transform_tables
 from ._fast_pq import query_pq_sse, estimate_pq_sse, init_heap
+from .utils import brute, brute1, bottom_k, pad2, pad1
 
 from numpy.core._methods import _amax, _mean
 
@@ -14,41 +15,9 @@ warnings.simplefilter("error", category=ConvergenceWarning)
 
 TransformedData = namedtuple("TransformedData", "size packed")
 
-import os
-
-os.environ["NUMPY_EXPERIMENTAL_ARRAY_FUNCTION"] = "0"
-
-
-def pad1(arr, m):
-    (s,) = arr.shape
-    new_shape = (s + (-s) % m,)
-    padded_arr = np.zeros(new_shape, dtype=arr.dtype)
-    padded_arr[:s] = arr
-    return padded_arr
-
-
-def pad2(arr, m1, m2):
-    s1, s2 = arr.shape
-    new_shape = (s1 + (-s1) % m1, s2 + (-s2) % m2)
-    padded_arr = np.zeros(new_shape, dtype=arr.dtype)
-    padded_arr[:s1, :s2] = arr
-    return padded_arr
-
-
-def bottom_k(arr, k):
-    if k >= len(arr):
-        return np.arange(len(arr))
-    return np.argpartition(arr, k)[:k]
-
-
-def bottom_k_2d(arr, k):
-    if k >= arr.shape[1]:
-        return np.resize(np.arange(arr.shape[1]), arr.shape)
-    return np.argpartition(arr, k, axis=1)[:, :k]
-
 
 class FastPQ:
-    def __init__(self, dims_per_block):
+    def __init__(self, dims_per_block, use_kmeans=True):
         """
         Initializes the FastPQ class with the specified number of dimensions per block.
 
@@ -60,6 +29,7 @@ class FastPQ:
         self.dims_per_block = dims_per_block
         self.centers = None  # Shape: (n_blocks, 16, dims_per_block)
         self.sqrt_n_blocks = None
+        self.use_kmeans = use_kmeans
 
     def fit(self, data, verbose=False):
         """
@@ -91,24 +61,51 @@ class FastPQ:
         assert d % self.dims_per_block == 0
         assert (d // self.dims_per_block) % 2 == 0
         dpb = self.dims_per_block
+        parts = data.reshape(n, d // dpb, dpb)
         # We always use 16 clusters in FastPQ, since we want to use 4 bit SSE operations.
-        cl = sklearn.cluster.KMeans(16, n_init=2)
         centers = []
         transformed = []
-        for i in range(d // self.dims_per_block):
-            if verbose:
-                print(f"Fitting block {i}")
-            try:
-                cl.fit(data[:, i * dpb : (i + 1) * dpb])
-            except ConvergenceWarning:
-                pass
-            # It doesn't give too much precision to do separate centers for each block,
-            # but durnig queries we need seperate distance tables per block anyway, so
-            # it doesn't cost us much.
-            # We .copy() the centers because we are reusing the KMeans object.
-            centers.append(cl.cluster_centers_.copy())
-            # Might as well grab the labels (transformed column) while we have it.
-            transformed.append(cl.labels_[:, None])
+        if self.use_kmeans:
+            cl = sklearn.cluster.KMeans(16, n_init=2)
+            for i in range(d // dpb):
+                if verbose:
+                    print(f"Fitting block {i}")
+                try:
+                    cl.fit(parts[:, i, :])
+                except ConvergenceWarning:
+                    pass
+                # It doesn't give too much precision to do separate centers for each block,
+                # but durnig queries we need seperate distance tables per block anyway, so
+                # it doesn't cost us much.
+                # We .copy() the centers because we are reusing the KMeans object.
+                centers.append(cl.cluster_centers_.copy())
+                # Might as well grab the labels (transformed column) while we have it.
+                transformed.append(cl.labels_[:, None])
+        else:
+            assert dpb == 2, "Fixed code only defined for dpb = 2"
+            # Standard code for quantizing a Gaussian
+            base = np.array(
+                [(0, 0)]
+                + [
+                    (1 * np.cos(th), 1 * np.sin(th))
+                    for th in np.linspace(0, 2 * np.pi, 6)
+                ]
+                + [
+                    (2 * np.cos(th), 2 * np.sin(th))
+                    for th in np.linspace(0, 2 * np.pi, 9)
+                ]
+            )
+            # Scale separately for each column
+            for i in range(d // self.dims_per_block):
+                col = parts[:, i, :]
+                # Transform base code
+                mu = np.mean(col, axis=0)
+                S = np.cov(col.T, bias=True)
+                code = base @ np.linalg.cholesky(S).T + mu
+                # Compute labels
+                transformed.append(brute(col, code, 1))
+                centers.append(code)
+
         # (d / dpb, 16, dpb) -> (16, d)
         self.centers = (
             np.array(centers, dtype=np.float32).transpose(1, 0, 2).reshape(16, d)
@@ -265,13 +262,12 @@ class _FastDistanceTable:
         # closest points. If we got fewer or exactly k outputs, there is no need
         # to compute the true distaneces.
         if rescore <= k:
-            return indices, values
+            return indices
 
         # Remove padding from q
-        diff = data[indices] - self.q[: data.shape[1]]
-        dists = np.einsum("ij,ij->i", diff, diff)
-        best = bottom_k(dists, k=k)
-        return indices[best], dists[best]
+        unpadded_q = self.q[: data.shape[1]]
+        best = brute1(unpadded_q, data[indices], k)
+        return indices[best]
 
 
 class DummyPQ:

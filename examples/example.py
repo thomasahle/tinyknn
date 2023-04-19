@@ -31,8 +31,10 @@ trus = cdist(qs, X).argmin(axis=1)
 t0 = time.time() - start
 
 print("Fitting PQ")
-pq = FastPQ(dims_per_block=dpb)
+start = time.time()
+pq = FastPQ(dims_per_block=dpb, use_kmeans=False)
 data = pq.fit_transform(X)
+print("Took:", time.time() - start)
 
 print("Querying")
 t1, t2 = 0, 0
@@ -62,6 +64,6 @@ print("Queries/second:", k / (t1 + t2))
 print()
 print("Total time spent on preprocess:", t1)
 print("Total time spent on search:", t2)
-print("Scipy speed for comparison:", t0)
+print("Numpy brute force speed for comparison:", t0)
 # Number of times we reached the max/min values of the int8
 print(f"Saturation degree: up: {sat_up}/{total}, down: {sat_down}/{total}")
