@@ -1,11 +1,9 @@
-import pytest
 import numpy as np
 import heapq
 
-np.random.seed(10)
-
-from fast_pq._fast_pq import estimate_pq_sse
 from fast_pq._fast_pq import insert, init_heap
+
+np.random.seed(10)
 
 
 class Heap:
@@ -63,7 +61,7 @@ def test_random():
         if v < top_pyheap:
             heapq.heappop(pyheap)
             heapq.heappush(pyheap, (-v, t))
-        assert set(heap.vals) == set(-vi for vi, _ in pyheap)
+        assert set(heap.vals) == {-vi for vi, _ in pyheap}
 
 
 def test_heap():

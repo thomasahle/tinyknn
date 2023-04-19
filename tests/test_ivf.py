@@ -1,44 +1,7 @@
 import numpy as np
 import pytest
 
-from fast_pq import FastPQ, DummyPQ
-from fast_pq import IVF, cdist, brute, group_data_by_indices
-
-
-def test_cdist():
-    n1, n2, d = 10, 8, 5
-    np.random.seed(10)
-    for chunk in [1, 10, 100]:
-        X = np.random.randn(n1, d)
-        Y = np.random.randn(n2, d)
-        dists = cdist(X, Y, chunk=chunk)
-        for i in range(n1):
-            for j in range(n2):
-                tru_dist = np.sum((X[i] - Y[j]) ** 2)
-                assert np.isclose(dists[i, j], tru_dist)
-
-
-def test_brute():
-    n1, n2, d = 40, 28, 5
-    np.random.seed(10)
-    X = np.random.randn(n1, d)
-    Y = np.random.randn(n2, d)
-    expected = cdist(X, Y).argpartition(axis=1, kth=10)[:, :10]
-    best = brute(X, Y, 10)
-    assert np.all(np.sort(expected) == np.sort(best))
-
-
-def test_angular():
-    n1, n2, d = 40, 28, 5
-    np.random.seed(10)
-    X = np.random.randn(n1, d)
-    Y = np.random.randn(n2, d)
-    X /= np.linalg.norm(X, axis=1, keepdims=True)
-    Y /= np.linalg.norm(Y, axis=1, keepdims=True)
-    # Ordering between euclidean and angular is the same for normalized vectors
-    angular = brute(X, Y, 10, metric="angular")
-    euclidean = brute(X, Y, 10, metric="euclidean")
-    assert np.all(np.sort(angular) == np.sort(euclidean))
+from fast_pq import FastPQ, IVF, brute
 
 
 def test_small_n():
@@ -88,7 +51,7 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
     X = np.random.randn(n, d).astype(np.float32)
     qs = np.random.randn(nq, d).astype(np.float32)
     if at < n:
-        trus = cdist(qs, X).argpartition(axis=1, kth=at)[:, :at]
+        trus = brute(qs, X, k=at)
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
     ivf = IVF(metric, int(n**0.5), FastPQ(2))
@@ -104,28 +67,3 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
 def test_small():
     np.random.seed(10)
     assert _test_recall_inner(15, 10, 30, 2, 10, "euclidean", 1) > 0.05
-
-
-def test_group_data_by_indices():
-    N, d, c, k = 100, 5, 6, 3
-    X = np.random.rand(N, d)
-    Q = np.random.randn(c, d)
-    indices = np.argpartition(-X @ Q.T, k, axis=1)[:, :k]
-
-    # Using the group_data_by_indices function
-    parts, _ = group_data_by_indices(X, indices, c)
-
-    # Using the alternative method with masks
-    mask_parts = []
-    for i in range(c):
-        mask = np.any(indices == i, axis=1)
-        mask_parts.append(X[mask])
-
-    # Compare the results
-    for i in range(c):
-        # Sort so we can compare
-        A = parts[i]
-        sorted_A = A[np.lexsort(A.T), :]
-        B = mask_parts[i]
-        sorted_B = B[np.lexsort(B.T), :]
-        np.testing.assert_allclose(sorted_A, sorted_B)

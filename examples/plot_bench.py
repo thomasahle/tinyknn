@@ -1,4 +1,5 @@
-import re, sys
+import re
+import sys
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -25,10 +26,10 @@ for line in data.split("\n"):
         queries_per_second.append(qps_value)
 
 # Plot the data
-for l, recall, queries_per_second in fast_pq_series:
-    plt.plot(recall, queries_per_second, marker="o", label=f"FastPQ {l} build probes")
-for l, recall, queries_per_second in annoy_series:
-    plt.plot(recall, queries_per_second, marker="o", label=f"Annoy {l} trees")
+for n, recall, queries_per_second in fast_pq_series:
+    plt.plot(recall, queries_per_second, marker="o", label=f"FastPQ {n} build probes")
+for n, recall, queries_per_second in annoy_series:
+    plt.plot(recall, queries_per_second, marker="o", label=f"Annoy {n} trees")
 plt.xlabel("Recall10@10")
 plt.xlim([0.3, 0.93])
 plt.ylim([100, 6000])

@@ -7,7 +7,7 @@ from sklearn.exceptions import ConvergenceWarning
 
 from ._transform import transform_data, transform_tables
 from ._fast_pq import query_pq_sse, estimate_pq_sse, init_heap
-from .utils import brute, brute1, bottom_k, pad2, pad1
+from .utils import brute, brute1, pad2, pad1
 
 from numpy.core._methods import _amax, _mean
 
@@ -47,7 +47,7 @@ class FastPQ:
         self : FastPQ
             The fitted FastPQ model.
         """
-        _transformed_data = self.fit_transform(data, verbose)
+        _ = self.fit_transform(data, verbose)
         return self
 
     def fit_transform(self, data, verbose=False):
@@ -268,30 +268,3 @@ class _FastDistanceTable:
         unpadded_q = self.q[: data.shape[1]]
         best = brute1(unpadded_q, data[indices], k)
         return indices[best]
-
-
-class DummyPQ:
-    def fit(self, data):
-        return self
-
-    def transform(self, data):
-        return data
-
-    def fit_transform(self, data):
-        return self.fit(data).transform(data)
-
-    def distance_table(self, q):
-        return DummyDistanceTable(q)
-
-
-class DummyDistanceTable:
-    def __init__(self, q):
-        self.q = q
-
-    def estimate_distances(self, data, out=None, rescale=False):
-        return ((data - self.q) * (data - self.q)).sum(axis=1)
-
-    def top(self, transformed_data, data, k=1, rescore=None, out=None):
-        dists = self.estimate_distances(transformed_data)
-        best = bottom_k(dists, k)
-        return best, dists[best]

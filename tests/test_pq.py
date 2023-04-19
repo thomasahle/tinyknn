@@ -3,7 +3,7 @@ import pytest
 from itertools import product
 
 from fast_pq._fast_pq import estimate_pq_sse, query_pq_sse, init_heap
-from fast_pq import FastPQ, cdist
+from fast_pq import FastPQ, brute
 
 np.random.seed(10)
 
@@ -20,7 +20,7 @@ def test_recall(i, method, signed, use_kmeans):
 def _test_recall_inner(n, d, k, dpb, method, signed, use_kmeans):
     X = np.random.randn(n, d).astype(np.float32)
     qs = np.random.randn(k, d).astype(np.float32)
-    trus = cdist(qs, X).argmin(axis=1)
+    trus = brute(qs, X, k=1)[:, 0]
 
     pq = FastPQ(dims_per_block=dpb, use_kmeans=use_kmeans)
     data = pq.fit_transform(X)

@@ -4,14 +4,13 @@ import argparse
 import time
 import numpy as np
 import os.path
-import sys
 import pickle
 import tqdm
 import re
 import sklearn.metrics
 
-from fast_pq import FastPQ, DummyPQ
-from fast_pq import IVF, cdist, brute
+from fast_pq import FastPQ
+from fast_pq import IVF, brute
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"
@@ -129,7 +128,7 @@ for build_probes in range(1, n_max_build_probes):
             pbar.set_description(
                 f"Probing: {n_probes} out of {ivf.n_clusters} clusters"
             )
-            for i, (query, true_neighbor) in pbar:
+            for _, (query, true_neighbor) in pbar:
                 guess = ivf.query(query, k=k_neighbours, n_probes=n_probes)
                 # guess = ivf.query(query, k=k_neighbours, n_probes=n_probes,
                 #                        pass_1 = int((build_probes / 2) * n_probes * k_neighbours))

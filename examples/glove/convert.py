@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import sys
 import struct
 import numpy as np
 import tqdm

@@ -2,11 +2,9 @@ import argparse
 import time
 import numpy as np
 import os.path
-import sys
 import tqdm
 
-from fast_pq import FastPQ, DummyPQ
-from fast_pq import IVF, cdist, brute
+from fast_pq import IVF, brute
 
 
 parser = argparse.ArgumentParser()
@@ -60,7 +58,7 @@ print("Querying")
 m = 10
 ts = [0] * m
 recalls = [0] * m
-for i, (q, tru) in tqdm.tqdm(enumerate(zip(qs, trus)), total=k):
+for q, tru in tqdm.tqdm(zip(qs, trus), total=k):
     for prbs in range(m):
         start = time.time()
         guess = ivf.query(q, k=10, n_probes=prbs + 1)

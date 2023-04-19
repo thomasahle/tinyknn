@@ -1,52 +1,8 @@
 import numpy as np
 import sklearn.cluster
 from fast_pq import FastPQ
-from .utils import bottom_k, bottom_k_2d, cdist, timer, brute1
-from ._fast_pq import query_pq_sse, init_heap
-
-
-def group_data_by_indices(X, indices, k):
-    """
-    Given a 2D array `X` of shape (N, d), a 2D array `indices` of shape (N, c) with integers in [0, k),
-    and an integer `k`, return a list `parts` of k arrays, such that all rows X[i] are in parts[indices[i, j]] for some j.
-
-    Args:
-    X (np.ndarray): A 2D numpy array of shape (N, d) containing the data points.
-    indices (np.ndarray): A 2D numpy array of shape (N, c) containing integers in the range [0, k).
-    k (int): The number of groups.
-
-    Returns:
-    list: A list of k numpy arrays, where each array contains the rows of X that belong to the corresponding group.
-    """
-    # Initialize an empty list to store the data points for each group
-    assert 0 <= np.min(indices) and np.max(indices) < k
-    parts = [[] for _ in range(k)]
-    ids = [[] for _ in range(k)]
-
-    # Iterate over each column in indices
-    for i in range(indices.shape[1]):
-        # Get the current column of indices
-        col = indices[:, i]
-
-        # Sort X by the current column of indices
-        sorted_indices = np.argsort(col)
-        sorted_X = X[sorted_indices]
-
-        # Compute the length of the runs in the current column of indices (sorted)
-        sorted_indices_unique, run_lengths = np.unique(
-            col[sorted_indices], return_counts=True
-        )
-        # Use a loop only over j = 0 to k - 1 that selects the runs of X and adds them to the corresponding group in parts
-        start = 0
-        for i, run_length in enumerate(run_lengths):
-            end = start + run_length
-            parts[sorted_indices_unique[i]].append(sorted_X[start:end])
-            ids[sorted_indices_unique[i]].append(sorted_indices[start:end])
-            start = end
-
-    parts = [np.vstack(part) for part in parts]
-    ids = [np.hstack(id_list) for id_list in ids]
-    return parts, ids
+from .utils import bottom_k_2d, cdist, timer, brute1, group_data_by_indices
+from ._fast_pq import query_pq_sse
 
 
 class IVF:
@@ -112,7 +68,8 @@ class IVF:
         Returns:
         --------
         self : object
-            Returns the instance itself, with the index structure built and data points assigned to the nearest n_probes cluster centers.
+            Returns the instance itself, with the index structure built and data points assigned
+            to the nearest n_probes cluster centers.
         """
 
         assert (
@@ -183,7 +140,7 @@ class IVF:
         indices = np.full(pass_1, -1, dtype=np.int64)
         values = np.full(pass_1, 127, dtype=np.int32)
 
-        for i, cl in enumerate(top):
+        for cl in top:
             true_n, transformed_data = self.pq_transformed_points[cl]
             query_pq_sse(
                 transformed_data,

@@ -4,12 +4,10 @@ import argparse
 import time
 import numpy as np
 import os.path
-import sys
-import pickle
 import tqdm
 
 from annoy import AnnoyIndex
-from fast_pq import cdist, brute
+from fast_pq import brute
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"
@@ -116,7 +114,7 @@ for build_probes in [100, 200, 400]:
             enumerate(zip(queries, true_neighbours)), total=num_queries, leave=False
         ) as pbar:
             pbar.set_description(f"Probing: {n_probes} nodes")
-            for i, (query, true_neighbor) in pbar:
+            for _, (query, true_neighbor) in pbar:
                 guess = ann.get_nns_by_vector(query, n=k_neighbours, search_k=n_probes)
                 found += len(set(true_neighbor) & set(guess))
 

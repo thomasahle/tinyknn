@@ -14,12 +14,12 @@ setup(
                 "-O3",
                 "-march=native",
                 "-ffast-math",
-                #'-unroll-count=4',
+                # '-unroll-count=4',
                 "-Wno-deprecated-declarations",
                 "-Wno-deprecated-api",
                 "-mavx",
                 "-m64",
-                #'-mprefetchwt1'
+                # '-mprefetchwt1'
             ],
             language="c++",
         ),

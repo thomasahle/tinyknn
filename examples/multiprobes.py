@@ -1,6 +1,6 @@
 import numpy as np
 import time
-from fast_pq import IVF, FastPQ, cdist
+from fast_pq import IVF, cdist
 
 np.random.seed(10)
 
