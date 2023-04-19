@@ -1,6 +1,6 @@
 [project]
 name = "fast_pq"
-version = "0.2"
+version = "0.3"
 description = "Approximate Nearest Neighbors in Python."
 authors = [
     {name="Thomas Dybdahl Ahle", email="lobais@gmail.com"}
