@@ -7,7 +7,7 @@ import os.path
 import tqdm
 
 from annoy import AnnoyIndex
-from fast_pq import brute
+from fast_pq import knn_brute
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"
@@ -72,7 +72,7 @@ if os.path.isfile(true_neighbours_filename):
 else:
     print("Computing true neighbours...")
     start = time.time()
-    true_neighbours = brute(queries, data, k_neighbours, metric=args.metric)
+    true_neighbours = knn_brute(queries, data, k_neighbours, metric=args.metric)
     print(f"Took {time.time() - start:.1f} seconds.")
     np.save(true_neighbours_filename, true_neighbours)
 

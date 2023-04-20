@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from itertools import product
 
-from fast_pq import cdist, brute, group_data_by_indices
+from fast_pq import cdist, knn_brute, group_data_by_indices
 
 
 np.random.seed(10)
@@ -31,7 +31,7 @@ def test_brute(n1, n2, d, k):
         expected = cdist(X, Y).argpartition(axis=1, kth=k)[:, :k]
     else:
         expected = np.broadcast_to(np.arange(n2), (n1, n2))
-    best = brute(X, Y, k)
+    best = knn_brute(X, Y, k)
     assert np.all(np.sort(expected) == np.sort(best))
 
 
@@ -42,8 +42,8 @@ def test_angular():
     X /= np.linalg.norm(X, axis=1, keepdims=True)
     Y /= np.linalg.norm(Y, axis=1, keepdims=True)
     # Ordering between euclidean and angular is the same for normalized vectors
-    angular = brute(X, Y, 10, metric="angular")
-    euclidean = brute(X, Y, 10, metric="euclidean")
+    angular = knn_brute(X, Y, 10, metric="angular")
+    euclidean = knn_brute(X, Y, 10, metric="euclidean")
     assert np.all(np.sort(angular) == np.sort(euclidean))
 
 

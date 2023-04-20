@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.cluster
 from fast_pq import FastPQ
-from .utils import bottom_k_2d, timer, brute1, brute, group_data_by_indices
+from .utils import bottom_k_2d, timer, knn_brute1, knn_brute, group_data_by_indices
 from ._fast_pq import query_pq_sse
 
 
@@ -80,7 +80,7 @@ class IVF:
             data /= np.linalg.norm(data, axis=1, keepdims=True)
 
         with timer(verbose, "Computing nearest clusters..."):
-            nearest_indices = brute(data, self.all_centers, k=n_probes, metric=self.metric)
+            nearest_indices = knn_brute(data, self.all_centers, k=n_probes, metric=self.metric)
 
         with timer(verbose, "PQ Transforming active centers..."):
             # We make sure that all centers have at least one point. This is just
@@ -157,5 +157,5 @@ class IVF:
             return indices
 
         unpadded_q = q[: self.data.shape[1]]
-        best = brute1(unpadded_q, self.data[indices], k)
+        best = knn_brute1(unpadded_q, self.data[indices], k)
         return indices[best]

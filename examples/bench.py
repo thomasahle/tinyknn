@@ -10,7 +10,7 @@ import re
 import sklearn.metrics
 
 from fast_pq import FastPQ
-from fast_pq import IVF, brute, utils
+from fast_pq import IVF, knn_brute, utils
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"
@@ -80,7 +80,7 @@ if os.path.isfile(true_neighbours_filename):
     num_queries, k_neighbours = true_neighbours.shape
 else:
     with utils.timer(True, "Computing true neighbours..."):
-        true_neighbours = brute(queries, data, k_neighbours, metric=args.metric, chunk=10)
+        true_neighbours = knn_brute(queries, data, k_neighbours, metric=args.metric, chunk=10)
     np.save(true_neighbours_filename, true_neighbours)
 
 ivf_filename = (

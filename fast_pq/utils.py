@@ -63,10 +63,11 @@ def cdist(X, Y, chunk=100):
     return res
 
 
-def brute(X, Y, k, metric="euclidean", chunk=100):
+def knn_brute(X, Y, k, metric="euclidean", chunk=100):
     """
-    Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
-    between X and Y.
+    Computes the k-nearest neighbors for each point in the dataset X based on the
+    specified distance metric between points in X and Y.
+    Uses batching on X to the computation more memory efficient.
     """
     assert k <= Y.shape[0], f"Can't find knn with {k=} and {Y.shape[0]} targets."
     if metric == "angular":
@@ -85,11 +86,7 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
     return res
 
 
-def brute1(x, Y, k):
-    """
-    Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
-    between X and Y.
-    """
+def knn_brute1(x, Y, k):
     diff = Y - x
     dists = np.einsum("ij,ij->i", diff, diff)
     return bottom_k(dists, k)

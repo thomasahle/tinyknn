@@ -5,7 +5,7 @@ import numpy as np
 import tqdm
 import argparse
 
-from fast_pq import FastPQ, brute
+from fast_pq import FastPQ, knn_brute
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n", type=int, default=160_000, help="Number of samples")
@@ -27,12 +27,12 @@ qs = np.random.randn(k, d).astype(np.float32)
 
 print("Computing true neighbours")
 start = time.time()
-trus = brute(qs, X, k=1)[:, 0]
+trus = knn_brute(qs, X, k=1)[:, 0]
 t0 = time.time() - start
 
 print("Fitting PQ")
 start = time.time()
-pq = FastPQ(dims_per_block=dpb, use_kmeans=False)
+pq = FastPQ(dims_per_block=dpb, use_kmeans=True)
 data = pq.fit_transform(X)
 print("Took:", time.time() - start)
 
@@ -64,6 +64,6 @@ print("Queries/second:", k / (t1 + t2))
 print()
 print("Total time spent on preprocess:", t1)
 print("Total time spent on search:", t2)
-print("Numpy brute force speed for comparison:", t0)
+print("Numpy knn_brute force speed for comparison:", t0)
 # Number of times we reached the max/min values of the int8
 print(f"Saturation degree: up: {sat_up}/{total}, down: {sat_down}/{total}")

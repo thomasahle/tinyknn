@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from fast_pq import IVF, FastPQ, brute
+from fast_pq import IVF, FastPQ, knn_brute
 
 np.random.seed(10)
 
@@ -16,7 +16,7 @@ qs = np.random.randn(nq, d).astype(np.float32)
 
 def compute_recall(metric, build_probes, query_probes):
     if at < n:
-        trus = brute(qs, X, k=at, metric=metric)
+        trus = knn_brute(qs, X, k=at, metric=metric)
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
     ivf = IVF(metric, int(n**0.5), FastPQ(2))

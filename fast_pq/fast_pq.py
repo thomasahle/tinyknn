@@ -7,7 +7,7 @@ from sklearn.exceptions import ConvergenceWarning
 
 from ._transform import transform_data, transform_tables
 from ._fast_pq import query_pq_sse, estimate_pq_sse, init_heap
-from .utils import brute, brute1, pad2, pad1
+from .utils import knn_brute, knn_brute1, pad2, pad1
 
 from numpy.core._methods import _amax, _mean
 
@@ -87,12 +87,9 @@ class FastPQ:
             base = np.array(
                 [(0, 0)]
                 + [
-                    (1 * np.cos(th), 1 * np.sin(th))
-                    for th in np.linspace(0, 2 * np.pi, 6)
-                ]
-                + [
-                    (2 * np.cos(th), 2 * np.sin(th))
-                    for th in np.linspace(0, 2 * np.pi, 9)
+                    (r * np.cos(th), r * np.sin(th))
+                    for r, num_points in zip([1, 2], [6, 9])
+                    for th in np.linspace(0, 2 * np.pi, num_points, endpoint=False)
                 ]
             )
             # Scale separately for each column
@@ -103,7 +100,7 @@ class FastPQ:
                 S = np.cov(col.T, bias=True)
                 code = base @ np.linalg.cholesky(S).T + mu
                 # Compute labels
-                transformed.append(brute(col, code, 1))
+                transformed.append(knn_brute(col, code, 1))
                 centers.append(code)
 
         # (d / dpb, 16, dpb) -> (16, d)
@@ -266,5 +263,5 @@ class _FastDistanceTable:
 
         # Remove padding from q
         unpadded_q = self.q[: data.shape[1]]
-        best = brute1(unpadded_q, data[indices], k)
+        best = knn_brute1(unpadded_q, data[indices], k)
         return indices[best]

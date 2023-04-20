@@ -4,7 +4,7 @@ import numpy as np
 import os.path
 import tqdm
 
-from fast_pq import IVF, brute
+from fast_pq import IVF, knn_brute
 
 
 parser = argparse.ArgumentParser()
@@ -39,7 +39,7 @@ fn = f"trus_{n}_{k}.npy"
 if os.path.isfile(fn):
     trus = np.load(fn)
 else:
-    trus = brute(qs, X, 10)
+    trus = knn_brute(qs, X, 10)
     np.save(fn, trus)
 print(trus.shape)
 

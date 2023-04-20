@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from fast_pq import FastPQ, IVF, brute
+from fast_pq import FastPQ, IVF, knn_brute
 
 
 def test_small_n():
@@ -51,7 +51,7 @@ def _test_recall_inner(n, d, nq, dpb, at, metric, n_probes):
     X = np.random.randn(n, d).astype(np.float32)
     qs = np.random.randn(nq, d).astype(np.float32)
     if at < n:
-        trus = brute(qs, X, k=at)
+        trus = knn_brute(qs, X, k=at)
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
     ivf = IVF(metric, int(n**0.5), FastPQ(2))
