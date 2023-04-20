@@ -1,7 +1,7 @@
 import numpy as np
 import sklearn.cluster
 from fast_pq import FastPQ
-from .utils import bottom_k_2d, cdist, timer, brute1, group_data_by_indices
+from .utils import bottom_k_2d, timer, brute1, brute, group_data_by_indices
 from ._fast_pq import query_pq_sse
 
 
@@ -78,23 +78,20 @@ class IVF:
         self.data = data = X.copy()
 
         with timer(verbose, "Computing nearest clusters..."):
-            # TODO: Use the compression here, somehow.
+            nearest_indices = brute(data, self.all_centers, k=n_probes, metric=self.metric)
 
-            if self.metric == "euclidean":
-                distances = cdist(data, self.all_centers)
-            elif self.metric == "angular":
-                data /= np.linalg.norm(data, axis=1, keepdims=True)
-                distances = -data @ self.all_centers.T
-
-            nearest_indices = bottom_k_2d(distances, n_probes)
-
-        # We make sure that all centers have at least one point. This is just
-        # a simple optimiation that's useful when there's not a lot of data
-        # in the IVF, or if the query is OOD.
         with timer(verbose, "PQ Transforming active centers..."):
+            # We make sure that all centers have at least one point. This is just
+            # a simple optimiation that's useful when there's not a lot of data
+            # in the IVF, or if the query is OOD.
+            print(nearest_indices.shape)
+            print(nearest_indices)
+            print(np.unique(nearest_indices).shape)
             self.active_centers = np.ascontiguousarray(
                 self.all_centers[np.unique(nearest_indices)], dtype=np.float32
             )
+            # We could have transformed the centers in IVF.fit(...), but we do it here
+            # instead so we only have to transform the active centers.
             self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
         with timer(verbose, "Transforming points..."):

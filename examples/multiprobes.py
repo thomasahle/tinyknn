@@ -1,6 +1,6 @@
 import numpy as np
 import time
-from fast_pq import IVF, cdist
+from fast_pq import IVF, brute
 
 np.random.seed(10)
 
@@ -16,8 +16,8 @@ qs = np.random.randn(nq, d).astype(np.float32)
 
 
 def compute_recall(metric, build_probes, query_probes):
-    if at < n:
-        trus = cdist(qs, X).argpartition(axis=1, kth=at)[:, :at]
+    if at <= n:
+        trus = brute(qs, X, at)
     else:
         trus = np.broadcast_to(np.arange(n), (nq, n))
     ivf = IVF(metric, int((n * build_probes) ** 0.5))

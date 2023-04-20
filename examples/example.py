@@ -5,7 +5,7 @@ import numpy as np
 import tqdm
 import argparse
 
-from fast_pq import FastPQ, cdist
+from fast_pq import FastPQ, brute
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n", type=int, default=160_000, help="Number of samples")
@@ -27,7 +27,7 @@ qs = np.random.randn(k, d).astype(np.float32)
 
 print("Computing true neighbours")
 start = time.time()
-trus = cdist(qs, X).argmin(axis=1)
+trus = brute(qs, X, k=1)[:, 0]
 t0 = time.time() - start
 
 print("Fitting PQ")

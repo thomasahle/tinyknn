@@ -68,13 +68,14 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
     Computes the k-nearest neighbors for each point in X based on the squared Euclidean distances
     between X and Y.
     """
+    assert k <= Y.shape[0], f"Can't find knn with {k=} and {Y.shape[0]} targets."
     if metric == "angular":
         X = X / np.linalg.norm(X, axis=1, keepdims=True)
         Y = Y / np.linalg.norm(Y, axis=1, keepdims=True)
     elif metric not in ["angular", "euclidean"]:
         raise ValueError(f"Metric not supported: {metric}")
     n = X.shape[0]
-    res = np.zeros((n, k))
+    res = np.zeros((n, k), dtype=int)
     Ynorm2 = np.einsum("ij,ij->i", Y, Y)
     for i in range(0, n, chunk):
         Xchunk = X[i : i + chunk]

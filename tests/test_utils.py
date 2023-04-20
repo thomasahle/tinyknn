@@ -1,11 +1,15 @@
+import pytest
 import numpy as np
+from itertools import product
 
 from fast_pq import cdist, brute, group_data_by_indices
 
 
+np.random.seed(10)
+
+
 def test_cdist():
     n1, n2, d = 10, 8, 5
-    np.random.seed(10)
     for chunk in [1, 10, 100]:
         X = np.random.randn(n1, d)
         Y = np.random.randn(n2, d)
@@ -16,19 +20,23 @@ def test_cdist():
                 assert np.isclose(dists[i, j], tru_dist)
 
 
-def test_brute():
-    n1, n2, d = 40, 28, 5
-    np.random.seed(10)
+@pytest.mark.parametrize(
+    "n1, n2, d, k",
+    product([40], [28], [5], [0, 1, 10, 28])
+)
+def test_brute(n1, n2, d, k):
     X = np.random.randn(n1, d)
     Y = np.random.randn(n2, d)
-    expected = cdist(X, Y).argpartition(axis=1, kth=10)[:, :10]
-    best = brute(X, Y, 10)
+    if k < n2:
+        expected = cdist(X, Y).argpartition(axis=1, kth=k)[:, :k]
+    else:
+        expected = np.broadcast_to(np.arange(n2), (n1, n2))
+    best = brute(X, Y, k)
     assert np.all(np.sort(expected) == np.sort(best))
 
 
 def test_angular():
     n1, n2, d = 40, 28, 5
-    np.random.seed(10)
     X = np.random.randn(n1, d)
     Y = np.random.randn(n2, d)
     X /= np.linalg.norm(X, axis=1, keepdims=True)
