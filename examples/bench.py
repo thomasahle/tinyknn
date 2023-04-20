@@ -10,7 +10,7 @@ import re
 import sklearn.metrics
 
 from fast_pq import FastPQ
-from fast_pq import IVF, brute
+from fast_pq import IVF, brute, utils
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"
@@ -75,15 +75,12 @@ true_neighbours_filename = (
     f"trus_{simple_name}_{k_neighbours=}_{num_queries=}_{metric=}.npy"
 )
 if os.path.isfile(true_neighbours_filename):
-    print("Loading true neighbours from", true_neighbours_filename)
-    true_neighbours = np.load(true_neighbours_filename)
+    with utils.timer(True, f"Loading true neighbours from {true_neighbours_filename}"):
+        true_neighbours = np.load(true_neighbours_filename)
     num_queries, k_neighbours = true_neighbours.shape
-    print(f"Found {num_queries=}, {k_neighbours=}")
 else:
-    print("Computing true neighbours...")
-    start = time.time()
-    true_neighbours = brute(queries, data, k_neighbours, metric=args.metric)
-    print(f"Took {time.time() - start:.1f} seconds.")
+    with utils.timer(True, "Computing true neighbours..."):
+        true_neighbours = brute(queries, data, k_neighbours, metric=args.metric, chunk=10)
     np.save(true_neighbours_filename, true_neighbours)
 
 ivf_filename = (
@@ -94,12 +91,11 @@ if os.path.isfile(ivf_filename):
     with open(ivf_filename, "rb") as file:
         pq, ivf = pickle.load(file)
 else:
-    print("Building Index...")
-    pq = FastPQ(dims_per_block)
-    ivf = IVF(args.metric, num_clusters, pq)
-    start = time.time()
-    ivf.fit(data, verbose=True)
-    print(f"Took {time.time() - start:.1f} seconds.")
+    with utils.timer(True, "Building Index..."):
+        pq = FastPQ(dims_per_block)
+        ivf = IVF(args.metric, num_clusters, pq)
+        start = time.time()
+        ivf.fit(data, verbose=True)
     print("Saving index to", ivf_filename)
     with open(ivf_filename, "wb") as file:
         pickle.dump((pq, ivf), file)
@@ -109,10 +105,8 @@ print("Now that we have the index, actually add the points to it.")
 
 n_max_build_probes = 10
 for build_probes in range(1, n_max_build_probes):
-    print(f"Adding each point to {build_probes} lists...")
-    start = time.time()
-    ivf.build(data, n_probes=build_probes, verbose=True)
-    print(f"Took {time.time() - start:.1f} seconds.")
+    with utils.timer(True, f"Adding each point to {build_probes} lists..."):
+        ivf.build(data, n_probes=build_probes, verbose=True)
 
     print("Querying")
     recall = 0

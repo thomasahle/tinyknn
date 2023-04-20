@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 from fast_pq import IVF, FastPQ, brute
 
@@ -27,7 +28,8 @@ def compute_recall(metric, build_probes, query_probes):
     return recall_at / nq / at
 
 
-def _test_monotone(metric):
+@pytest.mark.parametrize("metric", ["angular", "euclidean"])
+def test_monotone(metric):
     n = 4
     table = []
     for build_probes in range(1, n + 1):
@@ -49,10 +51,17 @@ def _test_monotone(metric):
         for j in range(1, n):
             assert table[i][j] >= table[i][j - 1] - 0.1
 
+@pytest.mark.parametrize("metric", ["angular", "euclidean"])
+def test_good(metric):
+    n = 1000
+    d = 10
+    nq = 30
+    at = 10
+    dpb = 2
+    max_probes = 10
 
-def test_euclidean():
-    _test_monotone("euclidean")
+    X = np.random.randn(n, d).astype(np.float32)
+    qs = np.random.randn(nq, d).astype(np.float32)
 
-
-def test_angular():
-    _test_monotone("angular")
+    assert compute_recall(metric, build_probes=4, query_probes=10) >= .9
+    assert compute_recall(metric, build_probes=10, query_probes=4) >= .9

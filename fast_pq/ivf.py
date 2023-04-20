@@ -76,6 +76,8 @@ class IVF:
             n_probes <= self.n_clusters
         ), f"Can't assign points to {n_probes} clusters, as index only has {self.n_clusters}"
         self.data = data = X.copy()
+        if self.metric == "angular":
+            data /= np.linalg.norm(data, axis=1, keepdims=True)
 
         with timer(verbose, "Computing nearest clusters..."):
             nearest_indices = brute(data, self.all_centers, k=n_probes, metric=self.metric)
@@ -84,9 +86,6 @@ class IVF:
             # We make sure that all centers have at least one point. This is just
             # a simple optimiation that's useful when there's not a lot of data
             # in the IVF, or if the query is OOD.
-            print(nearest_indices.shape)
-            print(nearest_indices)
-            print(np.unique(nearest_indices).shape)
             self.active_centers = np.ascontiguousarray(
                 self.all_centers[np.unique(nearest_indices)], dtype=np.float32
             )

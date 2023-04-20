@@ -72,7 +72,7 @@ def brute(X, Y, k, metric="euclidean", chunk=100):
     if metric == "angular":
         X = X / np.linalg.norm(X, axis=1, keepdims=True)
         Y = Y / np.linalg.norm(Y, axis=1, keepdims=True)
-    elif metric not in ["angular", "euclidean"]:
+    elif metric != "euclidean":
         raise ValueError(f"Metric not supported: {metric}")
     n = X.shape[0]
     res = np.zeros((n, k), dtype=int)
