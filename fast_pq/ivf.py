@@ -28,26 +28,24 @@ class IVF:
         assert n >= 1
 
         with timer(verbose, "Fitting IVF cluster centers..."):
-            X = np.ascontiguousarray(X, dtype=np.float32)
             cl = sklearn.cluster.KMeans(
                 n_clusters=self.n_clusters, n_init=1, verbose=verbose
             )
 
             if self.metric == "euclidean":
-                cl.fit(X)
-                self.all_centers = cl.cluster_centers_
+                self.all_centers = cl.fit(X).cluster_centers_
 
             elif self.metric == "angular":
                 # For angular we use kmeans clustering, but normalize the norm of the centers
                 # as to make inner product equivalent to angular similarity.
                 X = X / np.linalg.norm(X, axis=1, keepdims=True)
-                cl.fit(X)
-                self.all_centers = cl.cluster_centers_
+                self.all_centers = cl.fit(X).cluster_centers_
                 self.all_centers /= np.linalg.norm(
                     self.all_centers, axis=1, keepdims=True
                 )
 
         with timer(verbose, "Fitting PQ to data..."):
+            # Notice that in the case of metric = angular, X will have normalized rows.
             self.pq.fit(X, verbose=verbose)
 
         return self
