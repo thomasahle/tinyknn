@@ -98,10 +98,9 @@ class IVF:
             self.pq_transformed_centers = self.pq.transform(self.active_centers)
 
         with timer(verbose, "Transforming points..."):
-            groups, self.ids = group_data_by_indices(
-                data, nearest_indices, self.active_centers.shape[0]
-            )
-            for i in range(self.active_centers.shape[0]):
+            d = self.active_centers.shape[0]
+            groups, self.ids = group_data_by_indices(data, nearest_indices, d)
+            for i in range(d):
                 self.pq_transformed_points[i] = self.pq.transform(groups[i])
 
         return self
