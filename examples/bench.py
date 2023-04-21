@@ -124,8 +124,6 @@ for build_probes in range(1, n_max_build_probes):
             )
             for _, (query, true_neighbor) in pbar:
                 guess = ivf.query(query, k=k_neighbours, n_probes=n_probes)
-                # guess = ivf.query(query, k=k_neighbours, n_probes=n_probes,
-                #                        pass_1 = int((build_probes / 2) * n_probes * k_neighbours))
                 found += len(set(true_neighbor) & set(guess))
 
         qps = num_queries / (time.time() - start)

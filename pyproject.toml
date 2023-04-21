@@ -22,6 +22,7 @@ dependencies = [
    "numpy>=1.24",
    "pytest>=7.2",
    "scikit-learn>=1.2",
+   "tqdm>=4.65.0",
 ]
 
 [build-system]
