@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from fast_pq import IVF, FastPQ, knn_brute
+from tinyknn import IVF, FastPQ, knn_brute
 
 np.random.seed(10)
 

@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from itertools import product
 
-from fast_pq import cdist, knn_brute, group_data_by_indices
+from tinyknn import cdist, knn_brute, group_data_by_indices
 
 
 np.random.seed(10)

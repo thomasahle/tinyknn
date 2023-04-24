@@ -7,6 +7,7 @@ __pycache__/
 *.npy
 examples/glove/dataset
 *.txt
+bench/
 
 # C extensions
 *.so

@@ -7,7 +7,7 @@ import os.path
 import tqdm
 
 from annoy import AnnoyIndex
-from fast_pq import knn_brute
+from tinyknn import knn_brute
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"

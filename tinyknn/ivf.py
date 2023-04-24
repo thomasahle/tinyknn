@@ -1,6 +1,6 @@
 import numpy as np
 import sklearn.cluster
-from fast_pq import FastPQ
+from tinyknn import FastPQ
 from .utils import bottom_k_2d, timer, knn_brute1, knn_brute, group_data_by_indices
 from ._fast_pq import query_pq_sse
 

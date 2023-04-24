@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from fast_pq import FastPQ, IVF, knn_brute
+from tinyknn import FastPQ, IVF, knn_brute
 
 
 def test_small_n():

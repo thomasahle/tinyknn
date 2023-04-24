@@ -1,5 +1,5 @@
 [project]
-name = "fast_pq"
+name = "tinyknn"
 version = "0.3"
 description = "Approximate Nearest Neighbors in Python."
 authors = [
@@ -30,4 +30,4 @@ requires = ["setuptools", "wheel", "Cython"]
 build-backend = "setuptools.build_meta"
 
 [project.urls]
-homepage = "https://github.com/thomasahle/fast_pq/"
+homepage = "https://github.com/thomasahle/tinyknn/"

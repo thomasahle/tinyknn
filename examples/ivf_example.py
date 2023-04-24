@@ -4,7 +4,7 @@ import numpy as np
 import os.path
 import tqdm
 
-from fast_pq import IVF, knn_brute
+from tinyknn import IVF, knn_brute
 
 
 parser = argparse.ArgumentParser()

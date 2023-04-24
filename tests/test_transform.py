@@ -3,8 +3,8 @@ import math
 import numpy as np
 from functools import reduce
 
-from fast_pq._fast_pq import estimate_pq_sse
-from fast_pq._transform import transform_data, unpack, transform_tables
+from tinyknn._fast_pq import estimate_pq_sse
+from tinyknn._transform import transform_data, unpack, transform_tables
 
 
 def test_simple():

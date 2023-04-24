@@ -1,7 +1,7 @@
 import numpy as np
 import heapq
 
-from fast_pq._fast_pq import insert, init_heap
+from tinyknn._fast_pq import insert, init_heap
 
 np.random.seed(10)
 

@@ -2,8 +2,8 @@ import numpy as np
 import pytest
 from itertools import product
 
-from fast_pq._fast_pq import estimate_pq_sse, query_pq_sse, init_heap
-from fast_pq import FastPQ, knn_brute
+from tinyknn._fast_pq import estimate_pq_sse, query_pq_sse, init_heap
+from tinyknn import FastPQ, knn_brute
 
 np.random.seed(10)
 

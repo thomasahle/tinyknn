@@ -5,11 +5,11 @@ from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 setup(
-    packages=["fast_pq"],
+    packages=["tinyknn"],
     ext_modules=cythonize(
         Extension(
-            "fast_pq._fast_pq",
-            sources=["fast_pq/_fast_pq.pyx"],
+            "tinyknn._fast_pq",
+            sources=["tinyknn/_fast_pq.pyx"],
             extra_compile_args=[
                 "-O3",
                 "-march=native",

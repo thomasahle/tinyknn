@@ -9,8 +9,8 @@ import tqdm
 import re
 import sklearn.metrics
 
-from fast_pq import FastPQ
-from fast_pq import IVF, knn_brute, utils
+from tinyknn import FastPQ
+from tinyknn import IVF, knn_brute, utils
 
 parser = argparse.ArgumentParser(
     description="Benchmark FastPQ and IVF on GloVe dataset"
