@@ -1,8 +1,8 @@
-# Fast PQ
-FastPQ is a lightweight Python Vector Database specifically designed to offer high performance and be easy to read.
+# TinyKNN
+A tiny Approximate K-Nearest Neighbours Python Vector Database specifically designed to offer high performance and be easy to read.
 The main ingredient is an optimized implementation of 4bit Product Quantization (PQ) which enables fast approximate distance computations, 50 times faster than NumPy/BLAS.
 
-![Queries / Recall](https://raw.githubusercontent.com/thomasahle/fast_pq/main/static/plot.png)
+![Queries / Recall](https://raw.githubusercontent.com/thomasahle/tinyknn/main/static/plot.png)
 
 <p align="center">
 (Performance tradeoff on <a href="http://ann-benchmarks.com/glove-100-angular_10_angular.html">ANN Benchmarks</a>. Up and to the right is better.)
@@ -26,7 +26,7 @@ queries = np.random.rand(100, 128)
 We can use the `FastPQ` class to quantize the data and perform nearest neighbor search.
 
 ```python
-from fast_pq import FastPQ
+from tinyknn import FastPQ
 # Initialize PQ with 64 columns of 2 dimensions each
 pq = FastPQ(dims_per_block=2)
 X_compressed = pq.fit_transform(X)
@@ -46,7 +46,7 @@ This again can be attributed to the SSE instructions only allowing 4 bit table l
 We can use the `IVF` class to perform approximate nearest neighbor search with Inverted File Indexing.
 
 ```python
-from fast_pq import IVF
+from tinyknn import IVF
 ivf = IVF("euclidean", n_clusters=100).fit(X).build(X)
 neighbors = ivf.query(queries, k=10, n_probes=10)
 ```
@@ -57,7 +57,7 @@ See also `examples/` for more detailed examples of usage.
 
 ## Installing
 
-You need to build `fast_pq` before you can run it, as it contains Cython code.
+You need to build `tinyknn` before you can run it, as it contains Cython code.
 The easiest way to do this is to simply run
 
 ```bash
@@ -88,7 +88,7 @@ The reason is that Fast PQ uses a trick called [Accelerated Nearest Neighbor Sea
 with which SIMD instructions are used to perform 16 inner product operations in a single instruction.
 
 ### Developing
-If you are helping develop fast_pq, and need to test a change to the Cython code, you can rebuild it with
+If you are helping develop tinyknn, and need to test a change to the Cython code, you can rebuild it with
 ```bash
 $ python setup.py build_ext --inplace
 ```
