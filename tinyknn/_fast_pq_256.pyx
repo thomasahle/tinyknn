@@ -125,7 +125,7 @@ cpdef void query_pq_avx(uint64_t[:,::1] data, int n, uint64_t[::1] tables, int64
 
 cdef inline __m128i compute_block_dists_avx(uint64_t* data, int block_size, uint64_t[::1] tables, bool signd) nogil:
     cdef:
-        int j
+        int j, k
         __m256i hi_table, lo_table
         __m256i block, block_masked, lo_block, hi_block, dists
         __m256i low_mask = _mm256_set1_epi8(0x0f)
