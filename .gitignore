@@ -8,6 +8,7 @@ __pycache__/
 examples/glove/dataset
 *.txt
 bench/
+*.DS_Store
 
 # C extensions
 *.so
