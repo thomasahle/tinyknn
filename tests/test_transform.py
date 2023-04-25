@@ -75,3 +75,27 @@ def test_unpack():
     t_data = transform_data(data)
     data1 = unpack(t_data)
     np.testing.assert_array_equal(data, data1)
+
+
+def test_transpose():
+    np.random.seed(10)
+    n, d = 16 * 13, 2 * 7
+    data0 = np.random.randint(16, size=(n, d)).astype(np.uint8)
+    data = transform_data(data0)
+
+    assert data.shape == (n // 16, d)
+
+    # Partial unpack
+    shifts = np.arange(15, -1, -1, dtype=np.uint64) * 4
+    data = (data[..., np.newaxis] >> shifts) & 0xF
+
+    assert data[0, 0, -1] == data0[0][0]
+    assert data[0, 0, -2] == data0[0][1]
+    assert data[0, 0, -3] == data0[1][0]
+    assert data[0, 0, -4] == data0[1][1]
+    assert data[0, 1, -1] == data0[8][0]
+    assert data[0, 1, -2] == data0[8][1]
+    if d > 2:
+        assert data[0, 2, -1] == data0[0][2]
+        assert data[0, 2, -2] == data0[0][3]
+    assert data.shape == (n // 16, d, 16)

@@ -6,12 +6,24 @@ import warnings
 from sklearn.exceptions import ConvergenceWarning
 
 from ._transform import transform_data, transform_tables
-from ._fast_pq import query_pq_sse, estimate_pq_sse, init_heap
+
+from ._fast_pq import init_heap
 from .utils import knn_brute, knn_brute1, pad2, pad1
 
 from numpy.core._methods import _amax, _mean
 
 warnings.simplefilter("error", category=ConvergenceWarning)
+
+
+
+avx = True
+if avx:
+    from ._fast_pq_avx import query_pq_avx as query_pq, estimate_pq_avx as estimate_pq
+    dpad = 4
+else:
+    from ._fast_pq import query_pq_sse as query_pq, estimate_pq_sse as estimate_pq
+    dpad = 2
+
 
 TransformedData = namedtuple("TransformedData", "size packed")
 
@@ -56,10 +68,8 @@ class FastPQ:
         # SSE assumes the number of rows is divisible by 16.
         # It also needs the number of columns to be even, so we pad to a multiple
         # of 2 * self.dims_per_block.
-        data = pad2(data, 16, 2 * self.dims_per_block)
+        data = pad2(data, 16, dpad * self.dims_per_block)
         n, d = data.shape
-        assert d % self.dims_per_block == 0
-        assert (d // self.dims_per_block) % 2 == 0
         dpb = self.dims_per_block
         parts = data.reshape(n, d // dpb, dpb)
         # We always use 16 clusters in FastPQ, since we want to use 4 bit SSE operations.
@@ -130,16 +140,13 @@ class FastPQ:
         if data.size == 0:
             return data
         true_n = data.shape[0]
-        data = pad2(data, 16, 2 * self.dims_per_block)
+        data = pad2(data, 16, dpad * self.dims_per_block)
         n, d = data.shape
-        assert n % 16 == 0
         dpb = self.dims_per_block
         blocks = d // dpb
-        dists = (
-            np.square(self.centers[None] - data[:, None])
-            .reshape(n, 16, blocks, dpb)
-            .sum(axis=-1)
-        )
+
+        diff = (self.centers[None] - data[:, None]).reshape(n, 16, blocks, dpb)
+        dists = np.einsum("ijkl,ijkl->ijk", diff, diff)
         labels = np.argmin(dists, axis=1).astype(np.uint8)
         assert labels.shape == (n, blocks)
         return TransformedData(true_n, transform_data(labels))
@@ -159,7 +166,7 @@ class FastPQ:
             The FastDistanceTable object containing the computed distance table.
         """
         dpb = self.dims_per_block
-        q = pad1(q, 2 * dpb)
+        q = pad1(q, dpad * dpb)
 
         diff = (self.centers - q).reshape(16, -1, dpb)
         dists = np.einsum("ijk,ijk->ij", diff, diff)
@@ -195,7 +202,7 @@ class FastPQ:
             The FastDistanceTable object containing the computed unsigned distance table.
         """
         dpb = self.dims_per_block
-        q = pad1(q, 2 * dpb)
+        q = pad1(q, dpad * dpb)
         n_blocks = q.size // dpb
         dists = np.square(self.centers - q).reshape(16, n_blocks, dpb).sum(axis=-1)
         shift = np.min(dists)
@@ -225,8 +232,8 @@ class _FastDistanceTable:
         true_n, transformed_data = transformed_data
         if out is None:
             out = np.zeros(2 * len(transformed_data), dtype=np.uint64)
-        estimate_pq_sse(transformed_data, self.tables, out, self.signed)
-        res = out.view(np.int8)
+        estimate_pq(transformed_data, self.tables, out, self.signed)
+        res = out.view(np.int8 if self.signed else np.uint8)
         res = res[:true_n]  # Trim padding elements
         if not rescale:
             return res
@@ -251,7 +258,7 @@ class _FastDistanceTable:
         indices = np.zeros((rescore,), dtype=np.int64)
         values = np.zeros((rescore,), dtype=np.int32)
         init_heap(indices, values, self.signed)
-        query_pq_sse(
+        query_pq(
             transformed_data, true_n, self.tables, indices, values, self.signed
         )
 
