@@ -3,9 +3,54 @@ import pytest
 from itertools import product
 
 from tinyknn._fast_pq import estimate_pq_sse, query_pq_sse, init_heap
+from tinyknn._fast_pq_avx import estimate_pq_avx, query_pq_avx
+from tinyknn._transform import transform_tables, transform_data
 from tinyknn import FastPQ, knn_brute
 
 np.random.seed(10)
+
+@pytest.mark.parametrize(
+        "n, d, signed, simd_method",
+        product([16, 32], [4, 8], [True, False], ['sse', 'avx'])
+    )
+def test_estimate_pq_simd(n, d, signed, simd_method):
+    data = np.random.randint(0, 16, size=(n, d), dtype=np.uint8)
+    tables = np.random.randint(0, 256, size=(d, 16), dtype=np.uint8)
+    out = np.zeros(shape=(n//8,), dtype=np.uint64)
+    byte_type = np.int8 if signed else np.uint8
+
+    # Call the Cython function
+    simd_func = estimate_pq_avx if simd_method == 'avx' else estimate_pq_sse
+    simd_func(transform_data(data), transform_tables(tables), out, signed)
+    res = out.view(byte_type)
+    assert len(res) == n
+
+    # Compute the expected output
+    expected = np.zeros(shape=(n,), dtype=byte_type)
+    tables = tables.view(byte_type)
+    for i, row in enumerate(data):
+        dist = 0
+        if simd_method == 'sse':
+            for j, ptr in enumerate(row):
+                dist += int(tables[j][ptr])
+                # Clip values to simulate saturated addition
+                dist = np.clip(dist, -128, 127) if signed else np.clip(dist, 0, 255)
+        # AVX ordering is a bit odd right now, which affects saturation
+        elif simd_method == 'avx':
+            dist0, dist1 = 0, 0
+            for j, ptr in enumerate(row):
+                if j & 2 == 0:
+                    dist0 += int(tables[j][ptr])
+                    dist0 = np.clip(dist0, -128, 127) if signed else np.clip(dist0, 0, 255)
+                else:
+                    dist1 += int(tables[j][ptr])
+                    dist1 = np.clip(dist1, -128, 127) if signed else np.clip(dist1, 0, 255)
+            dist = dist0 + dist1
+            dist = np.clip(dist, -128, 127) if signed else np.clip(dist, 0, 255)
+
+        expected[i] = dist
+
+    np.testing.assert_array_equal(res, expected)
 
 
 @pytest.mark.parametrize(

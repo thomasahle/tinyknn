@@ -5,7 +5,7 @@ import numpy as np
 import tqdm
 import argparse
 
-from fast_pq import FastPQ, knn_brute
+from tinyknn import FastPQ, knn_brute
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--n", type=int, default=160_000, help="Number of samples")

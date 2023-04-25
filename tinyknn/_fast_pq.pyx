@@ -209,35 +209,30 @@ cpdef void query_pq_sse(uint64_t[:,::1] data, int n, uint64_t[::1] tables,
 cdef inline __m128i compute_block_dists(uint64_t* data, int block_size,
                                         uint64_t[::1] tables, bool signd) nogil:
     cdef:
-        int j
-        __m128i block_dists
+        int j, k
         __m128i hi_table, lo_table
         __m128i block, block_masked, lo_block, hi_block, dists
         __m128i low_mask = _mm_set1_epi8(0x0f)
+        __m128i block_dists = _mm_setzero_si128()
 
-    block_dists = _mm_setzero_si128()
     # We read two 64bit chunks at a time
     for j in range(block_size):
         # Do we need to use _mm_loadu_si128 or _mm_lddqu_si128 to load data?
         # I think they are only needed when data can be unaligned, but if we
         # use a numpy uint128, won't it be aligned?
         block = _mm_loadu_si128(<__m128i*> &data[2*j])
-        # Low comps
-        lo_table = _mm_loadu_si128(<__m128i*> &tables[4*j])     # load 128 bits
-        block_masked = _mm_and_si128(block, low_mask);          # & low_mask
-        dists = _mm_shuffle_epi8(lo_table, block_masked)        # table lookup
-        # Hopefully this will be specialized by the compiler
-        if signd:
-            block_dists = _mm_adds_epi8(block_dists, dists)     # block_dists += dists
-        else: block_dists = _mm_adds_epu8(block_dists, dists)
-        # High comps
-        hi_table = _mm_loadu_si128(<__m128i*> &tables[4*j+2])   # load 128 bits
-        block_masked = _mm_srli_epi64(block, 4)                 # >> 4
-        block_masked = _mm_and_si128(block_masked, low_mask)    # & low_mask
-        dists = _mm_shuffle_epi8(hi_table, block_masked)        # table lookup
-        if signd:
-            block_dists = _mm_adds_epi8(block_dists, dists)     # block_dists += dists
-        else: block_dists = _mm_adds_epu8(block_dists, dists)
+
+        for k in range(2):
+            lo_table = _mm_loadu_si128(<__m128i*> &tables[4*j+2*k]) # load 128 bits
+            block_masked = block & low_mask                         # low 4 bits
+            dists = _mm_shuffle_epi8(lo_table, block_masked)        # table lookup
+            # Hopefully this will be specialized by the compiler
+            if signd:
+                block_dists = _mm_adds_epi8(block_dists, dists)     # block_dists += dists
+            else: block_dists = _mm_adds_epu8(block_dists, dists)
+            # Next do the high bits
+            block >>= 4
+
     return block_dists
 
 
@@ -276,44 +271,6 @@ cpdef void insert_is(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogi
     indices[j], vals[j] = i, v
 
 
-cpdef void insert_old(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
-    ''' Insert (i,v) into the list, which is assumed ordered by vals '''
-    # We need to easily be able to identify the largest element in the heap,
-    # since that's the one we are kicking out. Thus this is a max-heap with
-    # the largest value at 0.
-    cdef:
-        int n = indices.shape[0]
-        int j = 0
-        int nxt, l, r
-
-    # First see if we are already in the array
-    for j in range(n):
-        if i == indices[j]:
-            return
-    j = 0
-
-    # Insert the new value at the top, replacing the old furthest point.
-    # We assume it's given that our value is at most as large as that old point.
-    indices[0], vals[0] = i, v
-    # Swap with the children until we are at least as large as both of them,
-    # or we reach the end of the array.
-    while True:
-        # Our current candidate for the next node: don't change.
-        nxt = j
-        l, r = 2*j+1, 2*j+2
-        # Swap with the largest of the two children, assuming
-        # then are not out of bounds.
-        if l < n and vals[l] > vals[nxt]: nxt = l
-        if r < n and vals[r] > vals[nxt]: nxt = r
-        # If we didn't pick any of the children, we are done.
-        if nxt == j:
-            break
-        # Swap with the child.
-        vals[nxt], vals[j] = vals[j], vals[nxt]
-        indices[nxt], indices[j] = indices[j], indices[nxt]
-        j = nxt
-
-
 cpdef void insert(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
     ''' Insert (i,v) into the list, which is assumed ordered by vals '''
     # We need to easily be able to identify the largest element in the heap,
@@ -349,28 +306,3 @@ cpdef void insert(int64_t[::1] indices, int[::1] vals, int64_t i, int v) nogil:
         vals[j], indices[j] = vals[nxt], indices[nxt]
         j = nxt
 
-
-
-# Maybe it doesn't make sense to do a real insertion sort, since we have to break
-# up values across their boundary all the time when shifting.
-# Instead we could relax the requirement, and say that we dont' need to be sorted
-# in each "block"?
-# void simd_insert_8bit(__m128i* arr, size_t num_blocks, uint8_t value) {
-#     __m128i xmm_value = _mm_set1_epi8(value);
-#     bool inserted = false;
-# 
-#     for (size_t i = 0; i < num_blocks; ++i) {
-#         __m128i xmm_current = arr[i];
-#         __m128i xmm_less_mask = _mm_cmplt_epi8(xmm_current, xmm_value);
-# 
-#         if not inserted and _mm_movemask_epi8(xmm_less_mask):
-#             # The value has not been inserted yet and there is a position to insert it
-#             xmm_current = _mm_alignr_epi8(xmm_value, xmm_current, 15);
-#             inserted = True;
-#         elif inserted:
-#             # The value has already been inserted, shift the remaining elements
-#             __m128i xmm_prev = arr[i - 1];
-#             xmm_current = _mm_alignr_epi8(xmm_current, xmm_prev, 15);
-#         arr[i] = xmm_current;
-#     }
-# }

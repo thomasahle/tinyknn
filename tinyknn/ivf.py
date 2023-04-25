@@ -2,7 +2,7 @@ import numpy as np
 import sklearn.cluster
 from tinyknn import FastPQ
 from .utils import bottom_k_2d, timer, knn_brute1, knn_brute, group_data_by_indices
-from ._fast_pq import query_pq_sse
+from .fast_pq import query_pq
 
 
 class IVF:
@@ -135,7 +135,7 @@ class IVF:
 
         for cl in top:
             true_n, transformed_data = self.pq_transformed_points[cl]
-            query_pq_sse(
+            query_pq(
                 transformed_data,
                 true_n,
                 dtable.tables,
