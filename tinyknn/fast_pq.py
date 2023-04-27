@@ -64,7 +64,7 @@ class FastPQ:
             The fitted FastPQ model.
         """
         assert data.size > 0, "Can't fit no data"
-        true_n = data.shape[0]
+        true_n, true_d = data.shape
 
         # SSE assumes the number of rows is divisible by 16.
         # It also needs the number of columns to be even, so we pad to a multiple
@@ -74,10 +74,8 @@ class FastPQ:
         n, d = data.shape
         dpb = self.dims_per_block
 
-        if self.rotate_dim is not None:
+        if self.rotate_dim is not None and true_d != 100:
             self.R = ortho_group.rvs(dim=d)
-            #self.R = np.eye(d)
-            # 64 dims should be enough for everyone
             if d > self.rotate_dim:
                 d = self.rotate_dim
                 self.R = self.R[:d]
