@@ -9,6 +9,7 @@ import tqdm
 import re
 import sklearn.metrics
 
+import tinyknn
 from tinyknn import FastPQ
 from tinyknn import IVF, knn_brute, utils
 
@@ -54,6 +55,7 @@ num_queries = args.n_queries
 dims_per_block = args.dims_per_block
 k_neighbours = args.k_neighbours
 metric = args.metric
+avx = tinyknn.avx
 simple_name = args.filename.split("/")[-1] if "/" in args.filename else args.filename
 
 print("Loading and shuffling...")
@@ -84,7 +86,7 @@ else:
     np.save(true_neighbours_filename, true_neighbours)
 
 ivf_filename = (
-    f"ivf_{simple_name}_{args.metric}_{num_clusters=}_{dims_per_block=}.pickle"
+    f"ivf_{simple_name}_{args.metric}_{num_clusters=}_{dims_per_block=}_{avx=}.pickle"
 )
 if os.path.isfile(ivf_filename):
     print("Loading Index from", ivf_filename)
