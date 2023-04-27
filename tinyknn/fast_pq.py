@@ -1,6 +1,8 @@
 import numpy as np
 import sklearn.cluster
 from collections import namedtuple
+from scipy.stats import ortho_group
+import tqdm
 
 import warnings
 from sklearn.exceptions import ConvergenceWarning
@@ -29,7 +31,7 @@ TransformedData = namedtuple("TransformedData", "size packed")
 
 
 class FastPQ:
-    def __init__(self, dims_per_block, use_kmeans=True):
+    def __init__(self, dims_per_block, use_kmeans=True, rotate_dim=64):
         """
         Initializes the FastPQ class with the specified number of dimensions per block.
 
@@ -42,6 +44,8 @@ class FastPQ:
         self.centers = None  # Shape: (n_blocks, 16, dims_per_block)
         self.sqrt_n_blocks = None
         self.use_kmeans = use_kmeans
+        self.rotate_dim = rotate_dim
+        self.R = None
 
     def fit(self, data, verbose=False):
         """
@@ -59,38 +63,68 @@ class FastPQ:
         self : FastPQ
             The fitted FastPQ model.
         """
-        _ = self.fit_transform(data, verbose)
-        return self
-
-    def fit_transform(self, data, verbose=False):
         assert data.size > 0, "Can't fit no data"
         true_n = data.shape[0]
+
         # SSE assumes the number of rows is divisible by 16.
         # It also needs the number of columns to be even, so we pad to a multiple
         # of 2 * self.dims_per_block.
+        # We always use 16 clusters in FastPQ, since we want to use 4 bit SSE operations.
         data = pad2(data, 16, dpad * self.dims_per_block)
         n, d = data.shape
         dpb = self.dims_per_block
-        parts = data.reshape(n, d // dpb, dpb)
-        # We always use 16 clusters in FastPQ, since we want to use 4 bit SSE operations.
+
+        if self.rotate_dim is not None:
+            self.R = ortho_group.rvs(dim=d)
+            #self.R = np.eye(d)
+            # 64 dims should be enough for everyone
+            if d > self.rotate_dim:
+                d = self.rotate_dim
+                self.R = self.R[:d]
+            data = data @ self.R.T
+
+        # if self.use_opq:
+        #     assert False, "Not implemented"
+        #     for _ in range(10):
+        #         centers = self._fit_code(data, verbose=verbose)
+        #         cols = data.reshape(n, d // dpb, dpb).transpose(1, 0, 2)
+        #         labels = [knn_brute(col, code, 1) for col, code in zip(cols, centers)]
+        #     # Stack the codebooks along a new axis
+        #     centers_stacked = np.stack(centers, axis=1)  # Shape: (K, M, dpb)
+        #     # Convert the labels list into a 2D array
+        #     labels_array = np.column_stack(labels)  # Shape: (n, M)
+        #     # Select the corresponding centers for each label
+        #     selected_centers = centers_stacked[labels_array]  # Shape: (n, M, dpb)
+        centers = self._fit_code(data, verbose=verbose)
+
+        # (d / dpb, 16, dpb) -> (16, d)
+        self.centers = (
+            np.array(centers, dtype=np.float32).transpose(1, 0, 2).reshape(16, d)
+        )
+        self.sqrt_n_blocks = np.sqrt(d // dpb)
+
+        return self
+
+    def fit_transform(self, data, verbose=False):
+        return self.fit(data, verbose).transform(data, verbose)
+
+    def _fit_code(self, data, verbose=False):
+        """ Returns the best PQ code (d / dpb, 16, dpb) """
+        n, d = data.shape
+        dpb = self.dims_per_block
+        cols = data.reshape(n, d // dpb, dpb).transpose(1, 0, 2)
+
         centers = []
-        transformed = []
         if self.use_kmeans:
             cl = sklearn.cluster.KMeans(16, n_init=2)
-            for i in range(d // dpb):
-                if verbose:
-                    print(f"Fitting block {i}")
+            loop = range(d // dpb)
+            for i in loop if not verbose else tqdm.tqdm(loop):
                 try:
-                    cl.fit(parts[:, i, :])
+                    cl.fit(cols[i])
                 except ConvergenceWarning:
                     pass
-                # It doesn't give too much precision to do separate centers for each block,
-                # but durnig queries we need seperate distance tables per block anyway, so
-                # it doesn't cost us much.
                 # We .copy() the centers because we are reusing the KMeans object.
                 centers.append(cl.cluster_centers_.copy())
-                # Might as well grab the labels (transformed column) while we have it.
-                transformed.append(cl.labels_[:, None])
         else:
             assert dpb == 2, "Fixed code only defined for dpb = 2"
             # Standard code for quantizing a Gaussian
@@ -104,25 +138,15 @@ class FastPQ:
             )
             # Scale separately for each column
             for i in range(d // self.dims_per_block):
-                col = parts[:, i, :]
+                col = cols[i]
                 # Transform base code
                 mu = np.mean(col, axis=0)
                 S = np.cov(col.T, bias=True)
                 code = base @ np.linalg.cholesky(S).T + mu
-                # Compute labels
-                transformed.append(knn_brute(col, code, 1))
                 centers.append(code)
+        return centers
 
-        # (d / dpb, 16, dpb) -> (16, d)
-        self.centers = (
-            np.array(centers, dtype=np.float32).transpose(1, 0, 2).reshape(16, d)
-        )
-        self.sqrt_n_blocks = np.sqrt(d // dpb)
-
-        labels = np.hstack(transformed).astype(np.uint8)
-        return TransformedData(true_n, transform_data(labels))
-
-    def transform(self, data):
+    def transform(self, data, verbose=False):
         """
         Transforms the given data using the FastPQ model.
 
@@ -142,12 +166,22 @@ class FastPQ:
         true_n = data.shape[0]
         data = pad2(data, 16, dpad * self.dims_per_block)
         n, d = data.shape
+
+        if self.R is not None:
+            data = data @ self.R.T
+            d = data.shape[1]
+
         dpb = self.dims_per_block
         blocks = d // dpb
 
-        diff = (self.centers[None] - data[:, None]).reshape(n, 16, blocks, dpb)
-        dists = np.einsum("ijkl,ijkl->ijk", diff, diff)
-        labels = np.argmin(dists, axis=1).astype(np.uint8)
+        cols = data.reshape(n, d // dpb, dpb).transpose(1, 0, 2)
+        code_cols = self.centers.reshape(16, -1, dpb).transpose(1, 0, 2)
+        labels = []
+        pairs = zip(cols, code_cols)
+        if verbose:
+            pairs = tqdm.tqdm(pairs, total=len(cols))
+        labels = [knn_brute(col, code, 1) for col, code in pairs]
+        labels = np.hstack(labels).astype(np.uint8)
         assert labels.shape == (n, blocks)
         return TransformedData(true_n, transform_data(labels))
 
@@ -166,7 +200,10 @@ class FastPQ:
             The FastDistanceTable object containing the computed distance table.
         """
         dpb = self.dims_per_block
+        raw_q = q
         q = pad1(q, dpad * dpb)
+        if self.R is not None:
+            q = q @ self.R.T
 
         diff = (self.centers - q).reshape(16, -1, dpb)
         dists = np.einsum("ijk,ijk->ij", diff, diff)
@@ -184,7 +221,7 @@ class FastPQ:
         # The transformation doesn't care about the sign, so we just use uint
         table = table.astype(np.uint8)
         trans = transform_tables(table.T)
-        return _FastDistanceTable(q, trans, shift, scale, signed=True)
+        return _FastDistanceTable(q, raw_q, trans, shift, scale, signed=True)
 
     def udistance_table(self, q):
         """
@@ -202,7 +239,10 @@ class FastPQ:
             The FastDistanceTable object containing the computed unsigned distance table.
         """
         dpb = self.dims_per_block
+        raw_q = q
         q = pad1(q, dpad * dpb)
+        if self.R is not None:
+            q = q @ self.R.T
         n_blocks = q.size // dpb
         dists = np.square(self.centers - q).reshape(16, n_blocks, dpb).sum(axis=-1)
         shift = np.min(dists)
@@ -211,12 +251,13 @@ class FastPQ:
         table = np.round(dists * scale)
         table = table.astype(np.uint8)
         trans = transform_tables(table.T)
-        return _FastDistanceTable(q, trans, shift, scale, signed=False)
+        return _FastDistanceTable(q, raw_q, trans, shift, scale, signed=False)
 
 
 class _FastDistanceTable:
-    def __init__(self, q, transformed_tables, mean, scale, signed):
+    def __init__(self, q, raw_q, transformed_tables, mean, scale, signed):
         self.q = q
+        self.raw_q = raw_q
         self.tables = transformed_tables
         self.mean = mean
         self.scale = scale
@@ -268,7 +309,6 @@ class _FastDistanceTable:
         if rescore <= k:
             return indices
 
-        # Remove padding from q
-        unpadded_q = self.q[: data.shape[1]]
-        best = knn_brute1(unpadded_q, data[indices], k)
+        # Use raw (unpadded, unrotated) q when comparing with raw data
+        best = knn_brute1(self.raw_q, data[indices], k)
         return indices[best]

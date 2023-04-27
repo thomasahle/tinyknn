@@ -73,9 +73,13 @@ class IVF:
         assert (
             n_probes <= self.n_clusters
         ), f"Can't assign points to {n_probes} clusters, as index only has {self.n_clusters}"
+
         self.data = data = X.copy()
         if self.metric == "angular":
             data /= np.linalg.norm(data, axis=1, keepdims=True)
+
+        #if self.pq.R is not None:
+
 
         with timer(verbose, "Computing nearest clusters..."):
             nearest_indices = knn_brute(data, self.all_centers, k=n_probes, metric=self.metric)
@@ -154,6 +158,6 @@ class IVF:
         if len(indices) <= k:
             return indices
 
-        unpadded_q = q[: self.data.shape[1]]
-        best = knn_brute1(unpadded_q, self.data[indices], k)
+        assert self.data.shape[1] == q.shape[0]
+        best = knn_brute1(q, self.data[indices], k)
         return indices[best]

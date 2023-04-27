@@ -35,6 +35,7 @@ def compute_recall(metric, build_probes, query_probes):
 
 
 # Print header row
+print(f"Metric: {metric}")
 print(f"Recall {at}@{at} using build_probes=b and query_probes=q.")
 print("b/q", end=" ")
 for query_probes in range(1, max_probes + 1):

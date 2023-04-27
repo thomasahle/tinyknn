@@ -97,13 +97,32 @@ def group_data_by_indices(X, indices, k):
     Given a 2D array `X` of shape (N, d), a 2D array `indices` of shape (N, c) with integers
     in [0, k), and an integer `k`, return a list `parts` of k arrays, such that all rows X[i]
     are in parts[indices[i, j]] for some j.
+
+    Example Input:
+        X =       [[1],    [2],    [3],    [4]]
+        indices = [[0, 1], [1, 2], [0, 2], [0, 1]]
+        k = 3
+
+    Output:
+        parts = [
+            [[1], [3], [4]],
+            [[2], [1], [4]],
+            [[2], [3]]
+        ]
+        indices = [
+            [0, 2, 3],
+            [1, 0, 3]
+            [1, 2]
+        ]
+        Meaning [1] was put in lists 0 and 1, [2] was put in lists 1 and 2 and so on.
+
     Args:
-    X (np.ndarray): A 2D numpy array of shape (N, d) containing the data points.
-    indices (np.ndarray): A 2D numpy array of shape (N, c) containing integers in the range [0, k).
-    k (int): The number of groups.
+        X (np.ndarray): A 2D numpy array of shape (N, d) containing the data points.
+        indices (np.ndarray): A 2D numpy array of shape (N, c) containing integers in the range [0, k).
+        k (int): The number of groups.
 
     Returns:
-    list: A list of k numpy arrays, where each array contains the rows of X that belong to the corresponding group.
+        list: A list of k numpy arrays, where each array contains the rows of X that belong to the corresponding group.
     """
     # Initialize an empty list to store the data points for each group
     assert 0 <= np.min(indices) and np.max(indices) < k

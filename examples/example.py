@@ -4,12 +4,12 @@ import time
 import numpy as np
 import tqdm
 import argparse
+import re
 
-from tinyknn import FastPQ, knn_brute
+from tinyknn import FastPQ, knn_brute, utils
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--n", type=int, default=160_000, help="Number of samples")
-parser.add_argument("--d", type=int, default=128, help="Dimension of each sample")
+parser.add_argument("--input", type=str, default="random-10000-128", help="Input file or random-n-d")
 parser.add_argument(
     "--k", type=int, default=1_000, help="Number of nearest neighbors to find"
 )
@@ -18,23 +18,40 @@ parser.add_argument(
     "--unsigned", action="store_true", help="Use unsigned distance quantization"
 )
 args = parser.parse_args()
-n, d, k, dpb, signed = args.n, args.d, args.k, args.dpb, not args.unsigned
+
+
+if match := re.match(r"random-(\d+)-(\d+)", args.input):
+    n, d = map(int, match.groups())
+    with utils.timer(True, f"Sampling {n=} vectors of dimension {d=}"):
+        X = np.random.randn(n, d).astype(np.float32)
+        qs = np.random.randn(args.k, d).astype(np.float32)
+else:
+    with utils.timer(True, f"Loading and shuffling {args.input}"):
+        data = np.load(args.input)
+        n, d = data.shape
+        np.random.seed(10)
+
+        from scipy.stats import ortho_group
+        R = ortho_group.rvs(dim=d)
+        R = R[:64]
+        data = data @ R.T
+
+        np.random.shuffle(data)
+        qs = data[:args.k]
+        X = data[args.k:]
+
+k, dpb, signed = args.k, args.dpb, not args.unsigned
 print(f"{n=}, {d=}, queries={k}, dims_per_block={dpb}")
 
-print("Sampling")
-X = np.random.randn(n, d).astype(np.float32)
-qs = np.random.randn(k, d).astype(np.float32)
+with utils.timer(True, "Computing true neighbours"):
+    trus = knn_brute(qs, X, k=1)[:, 0]
 
-print("Computing true neighbours")
-start = time.time()
-trus = knn_brute(qs, X, k=1)[:, 0]
-t0 = time.time() - start
+with utils.timer(True, "Fitting PQ"):
+    pq = FastPQ(dims_per_block=dpb, use_kmeans=True)
+    pq.fit(X[:10**5], verbose=True)
 
-print("Fitting PQ")
-start = time.time()
-pq = FastPQ(dims_per_block=dpb, use_kmeans=True)
-data = pq.fit_transform(X)
-print("Took:", time.time() - start)
+with utils.timer(True, "Transforming data"):
+    data = pq.transform(X, verbose=True)
 
 print("Querying")
 t1, t2 = 0, 0
@@ -64,6 +81,6 @@ print("Queries/second:", k / (t1 + t2))
 print()
 print("Total time spent on preprocess:", t1)
 print("Total time spent on search:", t2)
-print("Numpy knn_brute force speed for comparison:", t0)
+# print("Numpy knn_brute force speed for comparison:", t0)
 # Number of times we reached the max/min values of the int8
 print(f"Saturation degree: up: {sat_up}/{total}, down: {sat_down}/{total}")
